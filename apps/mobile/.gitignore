@@ -1,0 +1,55 @@
+# dependencies
+node_modules/
+
+# Expo
+.expo/
+.expo-shared/
+dist/
+web-build/
+expo-env.d.ts
+
+# Electron (IMPORTANT)
+dist_electron/
+*.exe
+*.blockmap
+*.yml
+
+# Native
+.kotlin/
+*.orig.*
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+
+# Metro
+.metro-health-check*
+
+# debug
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+
+# macOS
+.DS_Store
+*.pem
+
+# Windows
+Thumbs.db
+
+# local env files
+.env
+.env*.local
+
+# typescript
+*.tsbuildinfo
+
+# cache
+.cache/
+
+# generated native folders
+/ios
+/android
+
+!.github/workflows/build-mac.yml

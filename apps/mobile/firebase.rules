@@ -1,0 +1,149 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // --- Core Helper Functions ---
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return request.auth.uid == userId;
+    }
+
+    function getUserData(uid) {
+      return get(/databases/$(database)/documents/users/$(uid)).data;
+    }
+
+    function isInstructor() {
+      return isSignedIn() && getUserData(request.auth.uid).accountType == 'Instructor';
+    }
+
+    function isSuperAdmin() {
+      return isSignedIn() && getUserData(request.auth.uid).accountType == 'SuperAdmin';
+    }
+    
+    function isStudentOf(instructorId) {
+      let userData = getUserData(request.auth.uid);
+      return userData.accountType == 'Student' && 
+             (instructorId != null && instructorId in (userData.instructorIds || []));
+    }
+
+    function isInstructorOf(studentId) {
+      let studentData = getUserData(studentId);
+      return isSignedIn() && (request.auth.uid in (studentData.instructorIds || []));
+    }
+
+    // --- Users Collection ---
+    match /users/{userId} {
+      allow read: if isSignedIn()
+        || (resource.data.invitationType == 'student'
+            && resource.data.status == 'pending');
+      allow create: if isSignedIn();
+      allow update: if isOwner(userId) || isInstructor() || isSuperAdmin();
+      allow delete: if isSuperAdmin();
+    }
+
+    // --- Music Data (Raags, Songs, Compositions) ---
+    match /{collectionName}/{id} {
+      
+      allow read: if collectionName in ['raags', 'songs', 'laya', 'tihai', 'taals', 'compositions', 'westernItems'] && (
+        isSignedIn() && (
+          resource.data.isSystemDefault == true ||
+          resource.data.createdBy == request.auth.uid ||
+          isInstructor() || 
+          isStudentOf(resource.data.createdBy) || 
+          isSuperAdmin()
+        )
+      );
+
+      allow write: if collectionName in ['raags', 'songs', 'laya', 'tihai', 'taals', 'compositions', 'westernItems'] && (
+        isSignedIn() && (
+          isSuperAdmin() ||
+          (request.method == 'create' && request.resource.data.createdBy == request.auth.uid) ||
+          (request.method == 'update' && resource.data.createdBy == request.auth.uid) ||
+          (request.method == 'delete' && (resource.data.createdBy == request.auth.uid || isSuperAdmin()))
+        )
+      );
+
+      // --- Sub-collections (uploads, media, notations, etc.) ---
+      
+      // Specific privacy for media items
+      match /uploads/{uploadId} {
+        allow read: if isSignedIn() && (
+          !('uploadType' in resource.data) || resource.data.uploadType != 'Practice' || 
+          isOwner(resource.data.uploadedBy) || isInstructorOf(resource.data.uploadedBy) || isSuperAdmin()
+        );
+        allow write: if isSignedIn();
+      }
+
+      match /media/{mediaId} {
+         allow read: if isSignedIn() && (
+          !('uploadType' in resource.data) || resource.data.uploadType != 'Practice' || 
+          isOwner(resource.data.uploadedBy) || isInstructorOf(resource.data.uploadedBy) || isSuperAdmin()
+        );
+        allow write: if isSignedIn();
+      }
+
+      // Recursive catch for Gat/Bandish media and other sub-collections
+      match /{allOtherSubcollections=**} {
+        allow read: if isSignedIn();
+        allow write: if isSignedIn();
+      }
+    }
+
+    // --- Media Feedback (Comments) ---
+    match /mediaComments/{commentId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && request.resource.data.authorId == request.auth.uid;
+      allow update, delete: if isOwner(resource.data.authorId) || isSuperAdmin();
+    }
+
+    // --- Community Posts ---
+    match /communityPosts/{postId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && request.resource.data.authorId == request.auth.uid;
+      allow update, delete: if isSignedIn() && (
+        resource.data.authorId == request.auth.uid || isSuperAdmin()
+      );
+    }
+
+    // --- Class Assignments & Submissions ---
+    match /classAssignments/{id} {
+      allow read, create: if isSignedIn() && (
+        resource.data.instructorId == request.auth.uid || resource.data.studentId == request.auth.uid || isSuperAdmin()
+      );
+      allow update, delete: if isSignedIn() && (resource.data.instructorId == request.auth.uid || isSuperAdmin());
+    }
+
+    match /assignmentSubmissions/{id} {
+      allow read: if isSignedIn() && (
+        resource.data.instructorId == request.auth.uid || resource.data.studentId == request.auth.uid || isSuperAdmin()
+      );
+      allow create: if isSignedIn(); 
+      allow delete: if isSuperAdmin() || resource.data.studentId == request.auth.uid;
+    }
+
+    // --- Exercise & Other Collections ---
+    match /exerciseCollections/{id} {
+      allow read: if isSignedIn() && (resource.data.isSystemDefault == true || resource.data.createdBy == request.auth.uid || isInstructor() || isSuperAdmin());
+      allow write: if isSignedIn() && (isSuperAdmin() || (request.method == 'create' && request.resource.data.createdBy == request.auth.uid) || (request.method == 'update' && resource.data.createdBy == request.auth.uid));
+    }
+
+    match /media/{id} {
+      allow read, create: if isSignedIn();
+      allow update: if isSignedIn() && (isSuperAdmin() || request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likes', 'likesCount', 'commentsCount']) || resource.data.createdBy == request.auth.uid);
+      allow delete: if isSuperAdmin() || resource.data.createdBy == request.auth.uid;
+    }
+
+    match /bols/{id} {
+      allow read: if isSignedIn();
+      allow write: if isInstructor() || isSuperAdmin();
+    }
+
+    match /modules/{moduleId} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn() && (isSuperAdmin() || resource.data.createdBy == request.auth.uid);
+    }
+  }
+}

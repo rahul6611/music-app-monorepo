@@ -1,0 +1,69 @@
+{
+  "project_info": {
+    "project_number": "438883351179",
+    "firebase_url": "https://testfirebasepbapp-default-rtdb.firebaseio.com",
+    "project_id": "testfirebasepbapp",
+    "storage_bucket": "testfirebasepbapp.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:438883351179:android:6547530e6a542f21a8f28e",
+        "android_client_info": {
+          "package_name": "com.UnityTechnologies.com.unity.template.urpblank"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "438883351179-6vpnmbr1gjnuhe8ufqndiaejsm722hrs.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDnbGsGU55kfug7S5cO7HxLADwz5b2PFF4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "438883351179-6vpnmbr1gjnuhe8ufqndiaejsm722hrs.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:438883351179:android:1277f60d3f26a49fa8f28e",
+        "android_client_info": {
+          "package_name": "com.vekariyarahul6612.musiki"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "438883351179-6vpnmbr1gjnuhe8ufqndiaejsm722hrs.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDnbGsGU55kfug7S5cO7HxLADwz5b2PFF4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "438883351179-6vpnmbr1gjnuhe8ufqndiaejsm722hrs.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

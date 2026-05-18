@@ -1,0 +1,29 @@
+{
+  "$schema": "https://turbo.build/schema.json",
+  "tasks": {
+    "build": {
+      "dependsOn": ["^build"],
+      "outputs": ["dist/**", ".next/**", "dist_electron/**"]
+    },
+    "dev": {
+      "cache": false,
+      "persistent": true
+    },
+    "start": {
+      "cache": false,
+      "persistent": true
+    },
+    "android": {
+      "cache": false,
+      "persistent": true
+    },
+    "ios": {
+      "cache": false,
+      "persistent": true
+    },
+    "web": {
+      "cache": false,
+      "persistent": true
+    }
+  }
+}

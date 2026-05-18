@@ -1,0 +1,29 @@
+{
+  "name": "@music-app/firebase",
+  "version": "1.0.0",
+  "private": true,
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "dependencies": {
+    "@music-app/store": "*",
+    "@music-app/types": "*",
+    "@music-app/utils": "*",
+    "firebase": "^12.11.0"
+  },
+  "peerDependencies": {
+    "@react-native-async-storage/async-storage": "*",
+    "expo": "*",
+    "expo-asset": "*",
+    "expo-audio": "*",
+    "expo-camera": "*",
+    "expo-constants": "*",
+    "expo-device": "*",
+    "expo-file-system": "*",
+    "expo-image-picker": "*",
+    "expo-notifications": "*",
+    "react-native": "*"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0"
+  }
+}
