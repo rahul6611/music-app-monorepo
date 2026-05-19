@@ -345,7 +345,13 @@ const WeeklyPracticePlanModal: React.FC<WeeklyPracticePlanModalProps> = ({
     setParts((prev) => prev.map((p) => (p.id === partId ? { ...p, exercises: p.exercises.filter((e) => e.id !== exId) } : p)));
   };
 
-  const barWidth = width - 56;
+  const getBarWidth = () => {
+    return Platform.OS === 'web'
+      ? Math.min(800, width * 0.9) - 56
+      : width - 56;
+  };
+
+  const barWidth = getBarWidth();
   const dividerWidth = 24;
 
   const TimeDistributionBar = React.memo(({ 
@@ -358,7 +364,7 @@ const WeeklyPracticePlanModal: React.FC<WeeklyPracticePlanModalProps> = ({
     onPartsChange: (newParts: PracticePart[]) => void 
   }) => {
     const [localParts, setLocalParts] = useState(parts);
-    const barWidth = width - 56;
+    const barWidth = getBarWidth();
     const minutesPerPixel = totalMinutes / barWidth;
 
     useEffect(() => {
@@ -425,6 +431,101 @@ const WeeklyPracticePlanModal: React.FC<WeeklyPracticePlanModalProps> = ({
       });
     }, [localParts.length, handleMove]);
 
+    const startDrag = (i: number, e: any) => {
+      if (Platform.OS !== 'web') return;
+      e.preventDefault();
+      const startX = e.clientX;
+      const initialPartsState = [...localParts];
+
+      const handleMouseMove = (moveEvent: MouseEvent) => {
+        const currentX = moveEvent.clientX;
+        const totalDx = currentX - startX;
+        const totalDeltaMinutes = Math.round(totalDx * minutesPerPixel);
+        if (totalDeltaMinutes === 0) return;
+
+        setLocalParts(prev => {
+          const next = [...initialPartsState];
+          const leftPart = { ...next[i] };
+          const rightPart = { ...next[i + 1] };
+
+          let newLeftMin = leftPart.minutes + totalDeltaMinutes;
+          let newRightMin = rightPart.minutes - totalDeltaMinutes;
+
+          if (newLeftMin < 5) {
+            newRightMin -= (5 - newLeftMin);
+            newLeftMin = 5;
+          }
+          if (newRightMin < 5) {
+            newLeftMin -= (5 - newRightMin);
+            newRightMin = 5;
+          }
+
+          next[i] = { ...leftPart, minutes: newLeftMin };
+          next[i+1] = { ...rightPart, minutes: newRightMin };
+          return next;
+        });
+      };
+
+      const handleMouseUp = () => {
+        window.removeEventListener('mousemove', handleMouseMove);
+        window.removeEventListener('mouseup', handleMouseUp);
+        setLocalParts(finalParts => {
+          onPartsChange(finalParts);
+          return finalParts;
+        });
+      };
+
+      window.addEventListener('mousemove', handleMouseMove);
+      window.addEventListener('mouseup', handleMouseUp);
+    };
+
+    const startTouchDrag = (i: number, e: any) => {
+      if (Platform.OS !== 'web') return;
+      const startX = e.touches[0].clientX;
+      const initialPartsState = [...localParts];
+
+      const handleTouchMove = (moveEvent: TouchEvent) => {
+        const currentX = moveEvent.touches[0].clientX;
+        const totalDx = currentX - startX;
+        const totalDeltaMinutes = Math.round(totalDx * minutesPerPixel);
+        if (totalDeltaMinutes === 0) return;
+
+        setLocalParts(prev => {
+          const next = [...initialPartsState];
+          const leftPart = { ...next[i] };
+          const rightPart = { ...next[i + 1] };
+
+          let newLeftMin = leftPart.minutes + totalDeltaMinutes;
+          let newRightMin = rightPart.minutes - totalDeltaMinutes;
+
+          if (newLeftMin < 5) {
+            newRightMin -= (5 - newLeftMin);
+            newLeftMin = 5;
+          }
+          if (newRightMin < 5) {
+            newLeftMin -= (5 - newRightMin);
+            newRightMin = 5;
+          }
+
+          next[i] = { ...leftPart, minutes: newLeftMin };
+          next[i+1] = { ...rightPart, minutes: newRightMin };
+          return next;
+        });
+      };
+
+      const handleTouchEnd = () => {
+        window.removeEventListener('touchmove', handleTouchMove);
+        window.removeEventListener('touchend', handleTouchEnd);
+        setLocalParts(finalParts => {
+          onPartsChange(finalParts);
+          return finalParts;
+        });
+      };
+
+      window.addEventListener('touchmove', handleTouchMove, { passive: true });
+      window.addEventListener('touchend', handleTouchEnd);
+    };
+
     return (
       <View style={styles.timeBar}>
         {localParts.map((part, i) => {
@@ -445,7 +546,13 @@ const WeeklyPracticePlanModal: React.FC<WeeklyPracticePlanModalProps> = ({
                 <Text style={[styles.segmentText, { color: color.text }]}>{part.minutes}m</Text>
               </View>
               {i < localParts.length - 1 && (
-                <View {...Divider[i].panHandlers} style={styles.divider}>
+                <View 
+                  {...(Platform.OS !== 'web' ? Divider[i].panHandlers : {})}
+                  // @ts-ignore
+                  onMouseDown={Platform.OS === 'web' ? (e) => startDrag(i, e) : undefined}
+                  onTouchStart={Platform.OS === 'web' ? (e) => startTouchDrag(i, e) : undefined}
+                  style={styles.divider}
+                >
                   <View style={styles.dividerLine} />
                   <View style={styles.dividerLine} />
                 </View>
@@ -849,13 +956,23 @@ const styles = StyleSheet.create({
   overlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'flex-end',
+    justifyContent: Platform.OS === 'web' ? 'center' : 'flex-end',
+    alignItems: Platform.OS === 'web' ? 'center' : 'stretch',
   },
   modal: {
-    height: '92%',
+    height: Platform.OS === 'web' ? '85%' : '92%',
     borderTopLeftRadius: 32,
     borderTopRightRadius: 32,
     paddingTop: 24,
+    ...(Platform.OS === 'web' ? {
+      maxWidth: 800,
+      width: '90%',
+      borderRadius: 24,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 10 },
+      shadowOpacity: 0.3,
+      shadowRadius: 20,
+    } : {}),
   },
   header: {
     flexDirection: 'row',
@@ -936,6 +1053,7 @@ const styles = StyleSheet.create({
     marginHorizontal: -12,
     alignSelf: 'center',
     elevation: 3,
+    ...(Platform.OS === 'web' ? { cursor: 'col-resize' as any } : {}),
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
@@ -1048,6 +1166,9 @@ const styles = StyleSheet.create({
     borderRadius: 24,
     padding: 20,
     elevation: 5,
+    ...(Platform.OS === 'web' ? {
+      maxWidth: 600,
+    } : {}),
   },
   selectorHeader: {
     flexDirection: 'row',

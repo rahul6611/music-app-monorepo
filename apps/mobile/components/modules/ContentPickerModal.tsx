@@ -8,7 +8,8 @@ import {
   ScrollView, 
   ActivityIndicator,
   Dimensions,
-  TouchableWithoutFeedback 
+  TouchableWithoutFeedback,
+  Platform
 } from 'react-native';
 import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
 
@@ -234,13 +235,23 @@ const styles = StyleSheet.create({
   overlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'flex-end',
+    justifyContent: Platform.OS === 'web' ? 'center' : 'flex-end',
+    alignItems: Platform.OS === 'web' ? 'center' : 'stretch',
   },
   content: {
-    height: '80%',
+    height: Platform.OS === 'web' ? '70%' : '80%',
     borderTopLeftRadius: 32,
     borderTopRightRadius: 32,
     overflow: 'hidden',
+    ...(Platform.OS === 'web' ? {
+      maxWidth: 550,
+      width: '90%',
+      borderRadius: 24,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 10 },
+      shadowOpacity: 0.3,
+      shadowRadius: 20,
+    } : {}),
   },
   header: {
     padding: 20,
@@ -271,10 +282,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 16,
-    justifyContent: 'space-between',
+    justifyContent: Platform.OS === 'web' ? 'flex-start' : 'space-between',
   },
   typeCard: {
-    width: (width - 56) / 2,
+    width: Platform.OS === 'web' ? 150 : (width - 56) / 2,
     padding: 20,
     borderRadius: 20,
     alignItems: 'center',

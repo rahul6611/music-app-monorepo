@@ -6,7 +6,9 @@ import {
   ScrollView, 
   TouchableOpacity, 
   ActivityIndicator,
-  Dimensions
+  Dimensions,
+  useWindowDimensions,
+  Platform
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather, Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
@@ -20,6 +22,8 @@ import { Module, ModuleContentItem } from '@music-app/types';
 export default function ModuleDetailScreen() {
   const theme = useTheme();
   const router = useRouter();
+  const { width: windowWidth } = useWindowDimensions();
+  const isWebDesktop = Platform.OS === 'web' && windowWidth >= 768;
   const { id } = useLocalSearchParams<{ id: string }>();
   const { user: authUser } = useAuthStore();
   
@@ -99,7 +103,19 @@ export default function ModuleDetailScreen() {
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
-      <ScrollView contentContainerStyle={styles.scroll}>
+      <ScrollView contentContainerStyle={[
+        styles.scroll,
+        isWebDesktop && {
+          width: '100%',
+          marginTop: 24,
+          borderRadius: 24,
+          borderWidth: 1,
+          borderStyle: 'solid',
+          borderColor: theme.border,
+          padding: 24,
+          backgroundColor: theme.card,
+        }
+      ]}>
         <View style={styles.header}>
             <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
               <Feather name="chevron-left" size={28} color={theme.text} />

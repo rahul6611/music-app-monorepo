@@ -1,4 +1,4 @@
-import { View, Text, ScrollView, TouchableOpacity, Alert, ActivityIndicator, StyleSheet, Switch, Platform, Modal } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, Alert, ActivityIndicator, StyleSheet, Switch, Platform, Modal, useWindowDimensions } from 'react-native';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { Feather } from '@expo/vector-icons';
 import { auth, db } from '@music-app/firebase';
@@ -27,6 +27,8 @@ import {
 export default function Profile() {
   const { user } = useAuthStore();
   const theme = useTheme();
+  const { width: windowWidth } = useWindowDimensions();
+  const isWebDesktop = Platform.OS === 'web' && windowWidth >= 768;
   const { themeMode, setThemeMode } = useThemeStore();
   const [profileData, setProfileData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -239,7 +241,22 @@ export default function Profile() {
 
   return (
     <View style={styles.container}>
-      <ScrollView showsVerticalScrollIndicator={false}>
+      <ScrollView 
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={
+          isWebDesktop && {
+            width: '100%',
+            marginTop: 24,
+            borderRadius: 24,
+            borderWidth: 1,
+            borderStyle: 'solid',
+            borderColor: theme.border,
+            paddingBottom: 40,
+            backgroundColor: theme.card,
+            overflow: 'hidden'
+          }
+        }
+      >
         {/* Branding Header */}
         <View style={styles.header}>
           <View style={styles.avatarContainer}>

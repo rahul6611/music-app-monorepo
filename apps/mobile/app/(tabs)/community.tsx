@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, KeyboardAvoidingView, Platform, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@music-app/store';
@@ -12,7 +12,9 @@ import { Alert } from 'react-native';
 
 export default function Community() {
   const theme = useTheme();
-  const styles = createStyles(theme);
+  const { width: windowWidth } = useWindowDimensions();
+  const isWebDesktop = Platform.OS === 'web' && windowWidth >= 768;
+  const styles = createStyles(theme, isWebDesktop);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   const [isSheetVisible, setIsSheetVisible] = useState(false);
   const cameraStore = useCameraStore();
@@ -60,7 +62,19 @@ export default function Community() {
   }, [cameraStore.capturedUri]);
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={[
+      styles.container,
+      isWebDesktop && {
+        width: '100%',
+        marginTop: 24,
+        borderRadius: 24,
+        borderWidth: 1,
+        borderStyle: 'solid',
+        borderColor: theme.border,
+        overflow: 'hidden',
+        backgroundColor: theme.card,
+      }
+    ]}>
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Community</Text>
         <TouchableOpacity 
@@ -107,7 +121,7 @@ export default function Community() {
   );
 }
 
-const createStyles = (theme: any) => StyleSheet.create({
+const createStyles = (theme: any, isWebDesktop?: boolean) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: theme.background,
@@ -170,13 +184,23 @@ const createStyles = (theme: any) => StyleSheet.create({
   sheetOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'flex-end',
+    justifyContent: isWebDesktop ? 'center' : 'flex-end',
+    alignItems: isWebDesktop ? 'center' : 'stretch',
   },
   sheetContent: {
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     paddingBottom: 40,
     width: '100%',
+    ...(isWebDesktop ? {
+      maxWidth: 600,
+      borderRadius: 24,
+      paddingHorizontal: 20,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 10 },
+      shadowOpacity: 0.3,
+      shadowRadius: 20,
+    } : {}),
   },
   sheetHandle: {
     width: 40,
@@ -185,12 +209,14 @@ const createStyles = (theme: any) => StyleSheet.create({
     alignSelf: 'center',
     marginTop: 10,
     marginBottom: 20,
+    ...(isWebDesktop ? { display: 'none' } : {}),
   },
   sheetHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 20,
+    marginTop: isWebDesktop ? 20 : 0,
     marginBottom: 10,
   },
   sheetTitle: {

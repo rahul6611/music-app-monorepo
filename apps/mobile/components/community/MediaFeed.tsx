@@ -2,7 +2,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { 
   View, Text, Image, StyleSheet, FlatList, TouchableOpacity, 
   Dimensions, ActivityIndicator, Share, Modal, TextInput, 
-  KeyboardAvoidingView, Platform, Pressable, Keyboard, Linking
+  KeyboardAvoidingView, Platform, Pressable, Keyboard, Linking,
+  useWindowDimensions, ScrollView
 } from 'react-native';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
@@ -18,6 +19,7 @@ const PAGE_SIZE = 5;
 
 export default function MediaFeed({ refreshTrigger }: { refreshTrigger: number }) {
   const theme = useTheme();
+  const { width: windowWidth } = useWindowDimensions();
   const [mediaItems, setMediaItems] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -86,6 +88,48 @@ export default function MediaFeed({ refreshTrigger }: { refreshTrigger: number }
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color={theme.primary} />
+      </View>
+    );
+  }
+
+  if (Platform.OS === 'web' && windowWidth >= 768) {
+    return (
+      <View style={{ flex: 1 }}>
+        <View style={styles.feedHeader}>
+          <Text style={[styles.feedTitle, { color: theme.text }]}>Featured Posts</Text>
+        </View>
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={[styles.listContainer, { paddingHorizontal: 10, paddingBottom: 40 }]}
+        >
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'flex-start', gap: 20 }}>
+            {mediaItems.map((item) => (
+              <View key={item.id} style={{ width: windowWidth > 1300 ? '31%' : '48%', minWidth: 320, marginBottom: 10 }}>
+                <MediaCard item={item} theme={theme} />
+              </View>
+            ))}
+          </View>
+          
+          {loadingMore && (
+            <View style={styles.footerLoader}>
+              <ActivityIndicator size="small" color={theme.primary} />
+              <Text style={[styles.footerText, { color: theme.textSecondary }]}>Loading more...</Text>
+            </View>
+          )}
+          
+          {!hasMore && mediaItems.length > 0 && (
+            <View style={styles.footerLoader}>
+              <Text style={[styles.footerText, { color: theme.textSecondary }]}>You've reached the end</Text>
+            </View>
+          )}
+          
+          {mediaItems.length === 0 && (
+            <View style={styles.emptyContainer}>
+              <Ionicons name="apps-outline" size={48} color={theme.textSecondary} style={{ opacity: 0.5 }} />
+              <Text style={[styles.emptyText, { color: theme.textSecondary }]}>No posts yet. Be the first to share!</Text>
+            </View>
+          )}
+        </ScrollView>
       </View>
     );
   }
@@ -691,7 +735,8 @@ const styles = StyleSheet.create({
 
   modalOverlay: {
     flex: 1,
-    justifyContent: 'flex-end',
+    justifyContent: Platform.OS === 'web' ? 'center' : 'flex-end',
+    alignItems: Platform.OS === 'web' ? 'center' : 'stretch',
   },
   modalBackground: {
     ...StyleSheet.absoluteFillObject,
@@ -703,6 +748,14 @@ const styles = StyleSheet.create({
     height: '80%',
     width: '100%',
     paddingBottom: Platform.OS === 'ios' ? 20 : 0,
+    ...(Platform.OS === 'web' ? {
+      maxWidth: 600,
+      borderRadius: 24,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 10 },
+      shadowOpacity: 0.3,
+      shadowRadius: 20,
+    } : {}),
   },
   modalHandle: {
     width: 40,

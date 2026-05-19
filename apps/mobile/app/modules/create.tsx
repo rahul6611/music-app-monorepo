@@ -10,7 +10,8 @@ import {
   KeyboardAvoidingView,
   Platform,
   Alert,
-  Dimensions
+  Dimensions,
+  useWindowDimensions
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
@@ -33,6 +34,8 @@ const generateUUID = () => {
 export default function CreateModuleScreen() {
   const theme = useTheme();
   const router = useRouter();
+  const { width: windowWidth } = useWindowDimensions();
+  const isWebDesktop = Platform.OS === 'web' && windowWidth >= 768;
   const { user: currentUser } = useAuthStore();
   const { id } = useLocalSearchParams<{ id?: string }>();
 
@@ -149,7 +152,19 @@ export default function CreateModuleScreen() {
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'} 
         style={{ flex: 1 }}
       >
-        <ScrollView contentContainerStyle={styles.scroll}>
+        <ScrollView contentContainerStyle={[
+          styles.scroll,
+          isWebDesktop && {
+            width: '100%',
+            marginTop: 24,
+            borderRadius: 24,
+            borderWidth: 1,
+            borderStyle: 'solid',
+            borderColor: theme.border,
+            padding: 24,
+            backgroundColor: theme.card,
+          }
+        ]}>
           <View style={styles.header}>
             <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
               <Feather name="chevron-left" size={28} color={theme.text} />
@@ -286,6 +301,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     padding: 16,
+    ...(Platform.OS === 'web' ? {
+      maxWidth: 680,
+      width: '100%',
+      alignSelf: 'center',
+    } : {}),
   },
   backBtn: {
     padding: 4,
@@ -297,6 +317,11 @@ const styles = StyleSheet.create({
   form: {
     padding: 20,
     gap: 24,
+    ...(Platform.OS === 'web' ? {
+      maxWidth: 680,
+      width: '100%',
+      alignSelf: 'center',
+    } : {}),
   },
   inputGroup: {
     gap: 8,
@@ -396,6 +421,11 @@ const styles = StyleSheet.create({
   },
   actions: {
     padding: 20,
+    ...(Platform.OS === 'web' ? {
+      maxWidth: 680,
+      width: '100%',
+      alignSelf: 'center',
+    } : {}),
   },
   saveBtn: {
     height: 58,

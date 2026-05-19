@@ -10,7 +10,8 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
-  Alert
+  Alert,
+  useWindowDimensions
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather, Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
@@ -68,6 +69,9 @@ export default function CreateItemScreen() {
 
   const currentLabel = categoryLabels[category] || 'Item';
   const collectionName = collectionNames[category] || 'raags';
+  
+  const { width: windowWidth } = useWindowDimensions();
+  const isWebDesktop = Platform.OS === 'web' && windowWidth >= 768;
 
   useEffect(() => {
     if (isEditMode && params.id) {
@@ -228,7 +232,21 @@ export default function CreateItemScreen() {
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={{ flex: 1 }}
       >
-        <ScrollView contentContainerStyle={styles.scrollContainer}>
+        <ScrollView contentContainerStyle={[
+          styles.scrollContainer,
+          isWebDesktop && {
+            maxWidth: 680,
+            width: '100%',
+            alignSelf: 'center',
+            marginTop: 24,
+            borderRadius: 24,
+            borderWidth: 1,
+            borderStyle: 'solid',
+            borderColor: theme.border,
+            padding: 24,
+            backgroundColor: theme.card,
+          }
+        ]}>
         
           <View style={styles.header}>
             <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>

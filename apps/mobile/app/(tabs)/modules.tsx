@@ -8,7 +8,10 @@ import {
   ActivityIndicator, 
   Dimensions,
   RefreshControl,
-  Platform
+  Platform,
+  Modal,
+  Pressable,
+  Alert
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather, Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
@@ -38,6 +41,7 @@ export default function ModulesScreen() {
   const [activeFilter, setActiveFilter] = useState<ModuleDifficultyLevel | 'all'>('all');
   
   const [selectedModule, setSelectedModule] = useState<Module | null>(null);
+  const [activeModuleMenu, setActiveModuleMenu] = useState<Module | null>(null);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showAssignModal, setShowAssignModal] = useState(false);
 
@@ -106,6 +110,15 @@ export default function ModulesScreen() {
           <Text style={[styles.title, { color: theme.text }]}>Modules</Text>
           <Text style={[styles.subtitle, { color: theme.textSecondary }]}>Structured learning paths</Text>
         </View>
+        {Platform.OS === 'web' && userData?.accountType === 'Instructor' && (
+          <TouchableOpacity 
+            style={[styles.webAddBtn, { backgroundColor: theme.primary }]}
+            onPress={() => router.push('/modules/create')}
+          >
+            <Feather name="plus" size={16} color="#FFF" />
+            <Text style={styles.webAddBtnText}>Add Module</Text>
+          </TouchableOpacity>
+        )}
       </View>
 
       <View style={[styles.filtersContainer, { borderBottomColor: theme.border }]}>
@@ -171,6 +184,10 @@ export default function ModulesScreen() {
                      <TouchableOpacity 
                       style={styles.moreBtn}
                       onPress={() => {
+                          if (Platform.OS === 'web') {
+                              setActiveModuleMenu(module);
+                              return;
+                          }
                           Alert.alert(
                               "Module Actions",
                               "Choose an action for this module.",
@@ -247,7 +264,61 @@ export default function ModulesScreen() {
         />
       )}
 
-      {userData?.accountType === 'Instructor' && (
+      {activeModuleMenu && (
+        <Modal
+          visible={true}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setActiveModuleMenu(null)}
+        >
+          <Pressable 
+            style={styles.modalOverlay} 
+            onPress={() => setActiveModuleMenu(null)}
+          >
+            <View 
+              style={[
+                styles.pickerContent, 
+                { backgroundColor: theme.card },
+                Platform.OS === 'web' && { maxWidth: 360 }
+              ]}
+            >
+              <View style={styles.pickerHeader}>
+                <Text style={[styles.pickerTitle, { color: theme.text }]}>Module Actions</Text>
+                <TouchableOpacity onPress={() => setActiveModuleMenu(null)}>
+                  <Feather name="x" size={20} color={theme.textSecondary} />
+                </TouchableOpacity>
+              </View>
+
+              <TouchableOpacity 
+                style={[styles.pickerItem, { borderBottomColor: theme.border }]} 
+                onPress={() => {
+                  const module = activeModuleMenu;
+                  setActiveModuleMenu(null);
+                  router.push({ pathname: '/modules/create', params: { id: module.moduleId } });
+                }}
+              >
+                <Feather name="edit" size={20} color={theme.text} />
+                <Text style={[styles.pickerItemText, { color: theme.text }]}>Edit Module</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity 
+                style={styles.pickerItem} 
+                onPress={() => {
+                  const module = activeModuleMenu;
+                  setActiveModuleMenu(null);
+                  setSelectedModule(module);
+                  setShowDeleteModal(true);
+                }}
+              >
+                <Feather name="trash-2" size={20} color="#dc2626" />
+                <Text style={[styles.pickerItemText, { color: '#dc2626' }]}>Delete Module</Text>
+              </TouchableOpacity>
+            </View>
+          </Pressable>
+        </Modal>
+      )}
+
+      {Platform.OS !== 'web' && userData?.accountType === 'Instructor' && (
         <TouchableOpacity 
           style={[styles.fab, { backgroundColor: theme.primary }]}
           onPress={() => router.push('/modules/create')}
@@ -272,6 +343,22 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop: 10,
     paddingBottom: 15,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  webAddBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 12,
+    gap: 8,
+  },
+  webAddBtnText: {
+    color: '#FFF',
+    fontSize: 14,
+    fontWeight: '800',
   },
   title: {
     fontSize: 28,
@@ -310,7 +397,7 @@ const styles = StyleSheet.create({
   grid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    justifyContent: 'space-between',
+    justifyContent: Platform.OS === 'web' ? 'flex-start' : 'space-between',
     gap: 16,
   },
   moduleCard: {
@@ -438,5 +525,48 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 10,
     elevation: 6,
-  }
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: Platform.OS === 'web' ? 'center' : 'flex-end',
+    alignItems: Platform.OS === 'web' ? 'center' : 'stretch',
+  },
+  pickerContent: {
+    borderTopLeftRadius: 32,
+    borderTopRightRadius: 32,
+    padding: 24,
+    paddingBottom: Platform.OS === 'ios' ? 40 : 24,
+    ...(Platform.OS === 'web' ? {
+      maxWidth: 360,
+      borderRadius: 24,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 10 },
+      shadowOpacity: 0.3,
+      shadowRadius: 20,
+      width: '100%',
+    } : {}),
+  },
+  pickerHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  pickerTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+  },
+  pickerItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    gap: 12,
+  },
+  pickerItemText: {
+    flex: 1,
+    fontSize: 16,
+    fontWeight: '600',
+  },
 });

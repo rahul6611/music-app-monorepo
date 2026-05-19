@@ -37,9 +37,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </View>
 
         {/* Navigation Items list */}
-        <Text className="text-zinc-500 text-xxs font-bold uppercase tracking-widest px-3 mb-4">
-          Navigation
-        </Text>
         
         <ScrollView showsVerticalScrollIndicator={false} className="space-y-1">
           {items.map((item) => {
@@ -74,7 +71,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
       {/* User Session profile panel */}
       <View className="border-t border-zinc-900 pt-6">
-        <View className="flex-row items-center space-x-3 px-3 mb-4">
+        <Pressable
+          onPress={() => onSelect('profile')}
+          className="flex-row items-center space-x-3 px-3 mb-4 rounded-xl py-1 active:opacity-70 hover:bg-zinc-900/50"
+        >
           <View className="w-9 h-9 rounded-full bg-zinc-800 border border-zinc-700 items-center justify-center">
             <Feather name="user" size={16} color="#a855f7" />
           </View>
@@ -86,19 +86,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
               {userEmail}
             </Text>
           </View>
-        </View>
+        </Pressable>
 
-        {onLogout && (
-          <Pressable
-            onPress={onLogout}
-            className="flex-row items-center px-4 py-3 rounded-xl bg-zinc-900/40 border border-zinc-850 hover:bg-red-950/20 hover:border-red-900/30 group"
-          >
-            <Feather name="log-out" size={16} color="#9ca3af" className="mr-3 group-hover:text-red-400" />
-            <Text className="text-zinc-300 text-xs font-semibold group-hover:text-red-400">
-              Sign Out Session
-            </Text>
-          </Pressable>
-        )}
       </View>
     </View>
   );

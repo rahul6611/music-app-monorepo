@@ -12,6 +12,7 @@ import {
   Alert,
   Modal,
   Linking,
+  Pressable,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useAuthStore } from '@music-app/store';
@@ -98,6 +99,7 @@ const StudentsNew = () => {
   const [isStudentPickerVisible, setIsStudentPickerVisible] = useState(false);
   const [isPlanModalOpen, setIsPlanModalOpen] = useState(false);
   const [editingPlan, setEditingPlan] = useState<ClassAssignment | null>(null);
+  const [activePlanMenu, setActivePlanMenu] = useState<ClassAssignment | null>(null);
   const [isSavingPlan, setIsSavingPlan] = useState(false);
   const [isTrackingModalOpen, setIsTrackingModalOpen] = useState(false);
   const [trackingAssignment, setTrackingAssignment] = useState<AssignmentItem | null>(null);
@@ -273,6 +275,20 @@ const StudentsNew = () => {
   };
 
   const handleDeletePlan = (id: string) => {
+      if (Platform.OS === 'web') {
+          const confirmed = window.confirm('Are you sure you want to delete this practice plan?');
+          if (confirmed) {
+              (async () => {
+                  try {
+                      await deleteClassAssignment(id);
+                      loadAssignmentsForStudent(effectiveStudentId);
+                  } catch (e) {
+                      alert('Failed to delete plan.');
+                  }
+              })();
+          }
+          return;
+      }
       Alert.alert(
           'Delete Plan',
           'Are you sure you want to delete this practice plan?',
@@ -503,18 +519,7 @@ const StudentsNew = () => {
             {isInstructorView && (
                 <TouchableOpacity 
                     style={styles.moreButton}
-                    onPress={() => {
-                        Alert.alert(
-                            'Plan Options',
-                            '',
-                            [
-                                { text: 'Edit', onPress: () => { setEditingPlan(ca); setIsPlanModalOpen(true); } },
-                                { text: 'Duplicate for Today', onPress: () => handleDuplicatePlan(ca) },
-                                { text: 'Delete', style: 'destructive', onPress: () => handleDeletePlan(ca.id) },
-                                { text: 'Cancel', style: 'cancel' }
-                            ]
-                        );
-                    }}
+                    onPress={() => setActivePlanMenu(ca)}
                 >
                     <MaterialIcons name="more-vert" size={20} color={theme.textSecondary} />
                 </TouchableOpacity>
@@ -654,7 +659,13 @@ const StudentsNew = () => {
                             <MaterialIcons name="calendar-today" size={16} color={theme.textSecondary} />
                             <Text style={[styles.dateTitle, { color: theme.text }]}>{formatDateLabel(item.date)}</Text>
                         </View>
-                        {item.assignments.map(ca => renderClassCard(ca))}
+                        <View style={Platform.OS === 'web' ? { flexDirection: 'row', flexWrap: 'wrap', gap: 16 } : null}>
+                            {item.assignments.map(ca => (
+                                <View key={ca.id} style={Platform.OS === 'web' ? { width: '48%', minWidth: 320, marginBottom: 12 } : null}>
+                                    {renderClassCard(ca)}
+                                </View>
+                            ))}
+                        </View>
                     </View>
                 )}
               />
@@ -757,6 +768,72 @@ const StudentsNew = () => {
             setTrackingInstructorId('');
         }}
       />
+
+      {activePlanMenu && (
+        <Modal
+          visible={true}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setActivePlanMenu(null)}
+        >
+          <Pressable 
+            style={styles.modalOverlay} 
+            onPress={() => setActivePlanMenu(null)}
+          >
+            <View 
+              style={[
+                styles.pickerContent, 
+                { backgroundColor: theme.card },
+                Platform.OS === 'web' && { maxWidth: 360 }
+              ]}
+            >
+              <View style={styles.pickerHeader}>
+                <Text style={[styles.pickerTitle, { color: theme.text }]}>Plan Options</Text>
+                <TouchableOpacity onPress={() => setActivePlanMenu(null)}>
+                  <MaterialIcons name="close" size={20} color={theme.textSecondary} />
+                </TouchableOpacity>
+              </View>
+
+              <TouchableOpacity 
+                style={[styles.pickerItem, { borderBottomColor: theme.border }]} 
+                onPress={() => {
+                  const ca = activePlanMenu;
+                  setActivePlanMenu(null);
+                  setEditingPlan(ca);
+                  setIsPlanModalOpen(true);
+                }}
+              >
+                <MaterialIcons name="edit" size={20} color={theme.text} />
+                <Text style={[styles.pickerItemText, { color: theme.text }]}>Edit Plan</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity 
+                style={[styles.pickerItem, { borderBottomColor: theme.border }]} 
+                onPress={() => {
+                  const ca = activePlanMenu;
+                  setActivePlanMenu(null);
+                  handleDuplicatePlan(ca);
+                }}
+              >
+                <MaterialIcons name="content-copy" size={20} color={theme.text} />
+                <Text style={[styles.pickerItemText, { color: theme.text }]}>Duplicate Plan</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity 
+                style={styles.pickerItem} 
+                onPress={() => {
+                  const ca = activePlanMenu;
+                  setActivePlanMenu(null);
+                  handleDeletePlan(ca.id);
+                }}
+              >
+                <MaterialIcons name="delete" size={20} color="#dc2626" />
+                <Text style={[styles.pickerItemText, { color: '#dc2626' }]}>Delete Plan</Text>
+              </TouchableOpacity>
+            </View>
+          </Pressable>
+        </Modal>
+      )}
     </View>
   );
 };
@@ -772,7 +849,8 @@ const styles = StyleSheet.create({
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'flex-end',
+    justifyContent: Platform.OS === 'web' ? 'center' : 'flex-end',
+    alignItems: Platform.OS === 'web' ? 'center' : 'stretch',
   },
   modalDismiss: {
     flex: 1,
@@ -826,6 +904,10 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  moreButton: {
+    padding: 4,
+    borderRadius: 8,
   },
   datesList: {
     padding: 16,
@@ -964,10 +1046,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
   },
-  trackingSummary: {
-    fontSize: 11,
-    fontWeight: '600',
-  },
+
   historyRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -983,20 +1062,7 @@ const styles = StyleSheet.create({
     fontSize: 11,
     flex: 1,
   },
-  trackButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    alignSelf: 'flex-start',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 10,
-    gap: 6,
-    marginTop: 8,
-  },
-  trackButtonText: {
-    fontSize: 13,
-    fontWeight: '700',
-  },
+
   trackButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1155,6 +1221,15 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 32,
     padding: 24,
     paddingBottom: Platform.OS === 'ios' ? 40 : 24,
+    ...(Platform.OS === 'web' ? {
+      maxWidth: 500,
+      borderRadius: 24,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 10 },
+      shadowOpacity: 0.3,
+      shadowRadius: 20,
+      width: '100%',
+    } : {}),
   },
   pickerHeader: {
     flexDirection: 'row',
