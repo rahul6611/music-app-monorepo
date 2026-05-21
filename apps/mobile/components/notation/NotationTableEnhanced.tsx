@@ -3,7 +3,11 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal } from 'rea
 import { MaterialIcons } from '@expo/vector-icons';
 import { useTheme } from '@music-app/store';
 
-import { parseNestedMusicInput } from '@music-app/utils';
+import {
+  parseNestedMusicInput,
+  parseKanNotation,
+  splitKanSuperscriptLetters,
+} from '@music-app/utils';
 
 interface CellProps {
   content: any[];
@@ -155,15 +159,20 @@ const renderTextPiece = (
   if (isAsteriskPrefix) piece = piece.substring(1).trim();
   if (!piece) return null;
 
-  // Kan patterns <S R>
-  const kanMatch = piece.match(/^<\s*([A-Za-z]['’\u030D\u0304\u0305]?)\s*([A-Za-z]['’\u030D\u0304\u0305]?)\s*>$/);
-  if (kanMatch) {
+  // Kan patterns: <GP>G (multi-char superscript) or legacy <SR>
+  const kanParsed = parseKanNotation(piece);
+  if (kanParsed) {
+    const supLetters = splitKanSuperscriptLetters(kanParsed.superscript);
     return (
       <View style={{ flexDirection: 'row', alignItems: 'flex-start' }}>
-        <View style={{ marginTop: -4 }}>
-          {renderTextPiece(kanMatch[1], notationSystem, false, false, true, true)}
+        <View style={{ flexDirection: 'row', marginTop: -4, transform: [{ scale: 0.65 }] }}>
+          {supLetters.map((letter, idx) => (
+            <React.Fragment key={`kan-sup-${idx}`}>
+              {renderTextPiece(letter, notationSystem, false, false, true, true)}
+            </React.Fragment>
+          ))}
         </View>
-        {renderTextPiece(kanMatch[2], notationSystem, false, false, false, true)}
+        {renderTextPiece(kanParsed.main, notationSystem, false, false, false, true)}
       </View>
     );
   }
@@ -374,24 +383,28 @@ const renderToken = (
     );
   }
 
-  if (t === '<' || t === '/kn') {
-    // Kan Note style (Grace Note)
-    return (
-      <View style={{ flexDirection: 'row', alignItems: 'flex-start' }}>
-        {content.map((c: any, idx: number) => {
-          const isKanNote = idx === 0 && content.length > 1;
-          return (
-            <View key={idx} style={isKanNote ? { 
-              transform: [{ scale: 0.65 }], 
-              marginTop: -10,
-              marginRight: -4
-            } : {}}>
-               {renderToken(c, notationSystem, hasMeend, hasPhrases, isKanNote)}
-            </View>
-          );
-        })}
-      </View>
-    );
+  if (t === '/kn' || t === '/k') {
+    const swars = content
+      .filter((c: unknown): c is string => typeof c === 'string')
+      .map((s: string) => s.trim())
+      .filter(Boolean);
+    if (swars.length >= 2) {
+      const superscript = swars.slice(0, -1).join('');
+      const main = swars[swars.length - 1];
+      const supLetters = splitKanSuperscriptLetters(superscript);
+      return (
+        <View style={{ flexDirection: 'row', alignItems: 'flex-start' }}>
+          <View style={{ flexDirection: 'row', marginTop: -4, transform: [{ scale: 0.65 }] }}>
+            {supLetters.map((letter: string, idx: number) => (
+              <React.Fragment key={`kn-sup-${idx}`}>
+                {renderTextPiece(letter, notationSystem, hasMeend, hasPhrases, true, true)}
+              </React.Fragment>
+            ))}
+          </View>
+          {renderTextPiece(main, notationSystem, hasMeend, hasPhrases, false, true)}
+        </View>
+      );
+    }
   }
 
   if (t === '/ch') {
