@@ -5,9 +5,10 @@ import { useTheme } from '@music-app/store';
 
 import {
   parseNestedMusicInput,
-  parseKanNotation,
   splitKanSuperscriptLetters,
 } from '@music-app/utils';
+
+const isKanSwarToken = (s: string): boolean => Boolean(s && s !== '/' && s !== ')');
 
 interface CellProps {
   content: any[];
@@ -159,24 +160,6 @@ const renderTextPiece = (
   if (isAsteriskPrefix) piece = piece.substring(1).trim();
   if (!piece) return null;
 
-  // Kan patterns: <GP>G (multi-char superscript) or legacy <SR>
-  const kanParsed = parseKanNotation(piece);
-  if (kanParsed) {
-    const supLetters = splitKanSuperscriptLetters(kanParsed.superscript);
-    return (
-      <View style={{ flexDirection: 'row', alignItems: 'flex-start' }}>
-        <View style={{ flexDirection: 'row', marginTop: -4, transform: [{ scale: 0.65 }] }}>
-          {supLetters.map((letter, idx) => (
-            <React.Fragment key={`kan-sup-${idx}`}>
-              {renderTextPiece(letter, notationSystem, false, false, true, true)}
-            </React.Fragment>
-          ))}
-        </View>
-        {renderTextPiece(kanParsed.main, notationSystem, false, false, false, true)}
-      </View>
-    );
-  }
-
   // Octave patterns
   const patterns = [
     { reg: /^\.\.\.\s*([A-Za-z]['’\u030D\u0304\u0305]?)$/, oct: 'triple-lower' },
@@ -207,6 +190,29 @@ const renderTextPiece = (
   return <Text style={[styles.noteText, { color: '#000' }]}>{piece}</Text>;
 };
 
+const renderKanBlock = (
+  superscriptRaw: string,
+  mainRaw: string,
+  notationSystem: NotationSystem,
+  hasMeend: boolean,
+  hasPhrases: boolean,
+  keyPrefix: string,
+): React.ReactNode => {
+  const supLetters = splitKanSuperscriptLetters(superscriptRaw);
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'flex-start' }}>
+      <View style={{ flexDirection: 'row', marginTop: -4, marginRight: 1, transform: [{ scale: 0.65 }], gap: 0 }}>
+        {supLetters.map((letter, idx) => (
+          <View key={`${keyPrefix}-sup-${idx}`} style={{ marginLeft: idx > 0 ? -3 : 0 }}>
+            {renderTextPiece(letter, notationSystem, hasMeend, hasPhrases, true, true)}
+          </View>
+        ))}
+      </View>
+      {renderTextPiece(mainRaw, notationSystem, hasMeend, hasPhrases, false, true)}
+    </View>
+  );
+};
+
 const renderToken = (
   token: any,
   notationSystem: NotationSystem,
@@ -216,7 +222,7 @@ const renderToken = (
 ): React.ReactNode => {
   if (typeof token === 'string') {
     // If string contains notation markers, parse it
-    if (token.includes('/') || token.includes('(') || token.includes('<')) {
+    if (token.includes('/') || token.includes('(')) {
        const parsed = parseNestedMusicInput(token);
        if (parsed.length > 0) {
           return (
@@ -387,23 +393,19 @@ const renderToken = (
     const swars = content
       .filter((c: unknown): c is string => typeof c === 'string')
       .map((s: string) => s.trim())
-      .filter(Boolean);
+      .filter(isKanSwarToken);
     if (swars.length >= 2) {
-      const superscript = swars.slice(0, -1).join('');
-      const main = swars[swars.length - 1];
-      const supLetters = splitKanSuperscriptLetters(superscript);
-      return (
-        <View style={{ flexDirection: 'row', alignItems: 'flex-start' }}>
-          <View style={{ flexDirection: 'row', marginTop: -4, transform: [{ scale: 0.65 }] }}>
-            {supLetters.map((letter: string, idx: number) => (
-              <React.Fragment key={`kn-sup-${idx}`}>
-                {renderTextPiece(letter, notationSystem, hasMeend, hasPhrases, true, true)}
-              </React.Fragment>
-            ))}
-          </View>
-          {renderTextPiece(main, notationSystem, hasMeend, hasPhrases, false, true)}
-        </View>
+      return renderKanBlock(
+        swars.slice(0, -1).join(''),
+        swars[swars.length - 1],
+        notationSystem,
+        hasMeend,
+        hasPhrases,
+        'kn',
       );
+    }
+    if (swars.length === 1) {
+      return renderTextPiece(swars[0], notationSystem, hasMeend, hasPhrases, false, true);
     }
   }
 

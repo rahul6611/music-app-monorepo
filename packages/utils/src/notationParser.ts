@@ -1,41 +1,6 @@
 const SWAR_MODIFIER = "['’\u030D\u0304\u0305]?";
 
-/** Atomic kan token: <GP>G or legacy <SR> */
-export const KAN_NOTATION_TOKEN_REGEX = new RegExp(
-  `<[A-Za-z]+>(?:[A-Za-z]${SWAR_MODIFIER})?`,
-  'i'
-);
-
-export const KAN_NOTATION_EXAMPLES = [
-  '<GP>G',
-  '<SR>G',
-  '<PD>N',
-  '<GMP>R',
-  '<ND>S',
-  '<SR>',
-] as const;
-
-export function isKanNotationToken(value: string): boolean {
-  return KAN_NOTATION_TOKEN_REGEX.test(value.trim());
-}
-
-export function parseKanNotation(piece: string): { superscript: string; main: string } | null {
-  const pieceNorm = piece.trim().replace(/[\u2018\u2019\u02BC\u2032]/g, "'");
-  const outsideMain = pieceNorm.match(
-    new RegExp(`^<\\s*([A-Za-z]+)\\s*>\\s*([A-Za-z]${SWAR_MODIFIER})$`)
-  );
-  if (outsideMain) {
-    return { superscript: outsideMain[1], main: outsideMain[2] };
-  }
-  const legacyInside = pieceNorm.match(
-    new RegExp(`^<\\s*([A-Za-z]${SWAR_MODIFIER})\\s*([A-Za-z]${SWAR_MODIFIER})\\s*>$`)
-  );
-  if (legacyInside) {
-    return { superscript: legacyInside[1], main: legacyInside[2] };
-  }
-  return null;
-}
-
+/** Split kan superscript text into individual swar letters (for /kn rendering). */
 export function splitKanSuperscriptLetters(superscript: string): string[] {
   return superscript.match(new RegExp(`[A-Za-z]${SWAR_MODIFIER}`, 'g')) ?? [superscript];
 }
@@ -74,9 +39,9 @@ export type ParsedPhraseCell = {
  * SRP: Manages the hierarchical grouping and symmetry logic.
  */
 class NestedMusicParser {
-  // Regex identifies: /modifier, standalone /, (, ), kan <GP>G, notes with dots/modifiers, or hyphens.
+  // Regex identifies: /modifier, standalone /, (, ), notes with dots/modifiers, or hyphens.
   private static readonly TOKEN_EXTRACTOR =
-    /\/(\d+|md|kn|gh|mu|aa|ch)|\/|\(|\)|\||<[A-Za-z]+>(?:[A-Za-z]['’\u030D\u0304\u0305]?)?|(\*)?(\.{1,2})?[srgmpdnSRGMPDN]['’\u030D\u0304\u0305]?(\.{1,2})?|-/gi;
+    /\/(\d+|md|kn|gh|mu|aa|ch)|\/|\(|\)|\||(\*)?(\.{1,2})?[srgmpdnSRGMPDN]['’\u030D\u0304\u0305]?(\.{1,2})?|-/gi;
 
   public parseInput(input: string): ParsedPhraseCell[] {
     if (!input || !input.trim()) return [];
@@ -124,9 +89,8 @@ class NestedMusicParser {
 
     for (const match of matches) {
       const t = match[0];
-      const isKanToken = isKanNotationToken(t);
       // If it's not a syntax char (/, (, ), |), validate it as a music note/hyphen
-      if (!['/', '(', ')', '|'].includes(t) && !PatternValidator.isOpenSlash(t) && !isKanToken) {
+      if (!['/', '(', ')', '|'].includes(t) && !PatternValidator.isOpenSlash(t)) {
         if (!PatternValidator.isNote(t)) {
           // Instead of throwing, we'll just skip or treat as string in mobile for safety
           console.warn(`Validation Warning: "${t}" violates the dot or letter rules.`);

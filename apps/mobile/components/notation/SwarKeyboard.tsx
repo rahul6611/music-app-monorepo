@@ -284,8 +284,8 @@ const SwarKeyboard: React.FC<SwarKeyboardProps> = ({ currentBeatIndex = 1 }) => 
           <TouchableOpacity style={s.effectItem}>
             <View style={s.effectIconBox}>
               <View style={s.kanBox}>
-                <Text style={s.kanSmall}>s</Text>
-                <Text style={s.kanMain}>R</Text>
+                <Text style={s.kanSmall}>SR</Text>
+                <Text style={s.kanMain}>G</Text>
               </View>
             </View>
             <Text style={s.effectLabel}>Kan</Text>
@@ -478,6 +478,7 @@ const s = StyleSheet.create({
     color: '#333',
     marginRight: 1,
     marginTop: -2,
+    letterSpacing: -0.5,
   },
   kanMain: {
     fontSize: 14,

@@ -43,12 +43,12 @@ export default function NotationSymbolModal({ isOpen, onClose, isSitar }: Notati
     },
     {
       name: 'Kan',
-      description: 'A grace note played before the main note',
-      input: '/kn S R /',
+      description: 'A grace note before the main note. Use /kn with grace swars then the main swar (e.g. /kn S R G /).',
+      input: '/kn S R G /',
       style: (
         <View style={s.stylePreviewKan}>
-          <Text style={s.stylePreviewSupText}>S</Text>
-          <Text style={s.stylePreviewNoteText}>R</Text>
+          <Text style={s.stylePreviewSupText}>SR</Text>
+          <Text style={s.stylePreviewNoteText}>G</Text>
         </View>
       )
     }
@@ -431,6 +431,18 @@ const createStyles = (theme: any, isDark: boolean) => StyleSheet.create({
     paddingTop: 2,
     paddingHorizontal: 8,
   },
+  stylePreviewKanGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+  },
+  stylePreviewKanSep: {
+    fontSize: 14,
+    color: '#888',
+    fontWeight: '400',
+  },
   stylePreviewKan: {
     flexDirection: 'row',
     alignItems: 'flex-start',
@@ -440,6 +452,7 @@ const createStyles = (theme: any, isDark: boolean) => StyleSheet.create({
     fontWeight: '700',
     marginRight: 1,
     marginTop: -2,
+    letterSpacing: -0.5,
     color: theme.text,
   },
   stylePreviewMurki: {
