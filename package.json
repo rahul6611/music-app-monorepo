@@ -13,6 +13,7 @@
     "android": "turbo run android",
     "ios": "turbo run ios",
     "web": "turbo run web",
+    "test": "turbo run test",
     "clean": "turbo run clean && rimraf node_modules"
   },
   "devDependencies": {

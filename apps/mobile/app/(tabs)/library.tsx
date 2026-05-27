@@ -21,7 +21,7 @@ import { fetchUserData } from '@music-app/firebase';
 import { getAllRaags } from '@music-app/firebase';
 import { getAllExercises } from '@music-app/firebase';
 import { getAllExerciseCollections } from '@music-app/firebase';
-import { categoriesConfig, Category } from '@music-app/utils';
+import { categoriesConfig, getVisibleLibraryCategories } from '@music-app/utils';
 import CategoryPills from '../../components/library/CategoryPills';
 import LibraryCard from '../../components/library/LibraryCard';
 import AssignmentsList from '../../components/library/AssignmentsList';
@@ -30,14 +30,6 @@ import { getSharedItemIdsForStudent } from '@music-app/firebase';
 const getClassAssignmentsByStudent = async (uid: string) => []; 
 
 const { width } = Dimensions.get('window');
-
-const WESTERN_INSTRUMENT_IDS = [
-  'western_violin',
-  'classical_piano',
-  'blues_jazz_piano',
-  'cello',
-  'guitar',
-];
 
 export default function Library() {
   const theme = useTheme();
@@ -52,42 +44,10 @@ export default function Library() {
 
   const isDark = theme.background === '#000000';
 
-  const isWestern = useMemo(() => {
-    const styles = (userData?.musicSubStyleTypes || []).map((s: string) => s.toLowerCase());
-    return styles.length > 0 && styles.every((s: string) => WESTERN_INSTRUMENT_IDS.includes(s));
-  }, [userData?.musicSubStyleTypes]);
-
-  const isAuthorizedForLayaTihai = useMemo(() => {
-    if (!userData) return false;
-    return userData.accountType === 'Instructor' || userData.accountType === 'SuperAdmin';
-  }, [userData]);
-
-  const visibleCategories = useMemo(() => {
-    return categoriesConfig.filter((category) => {
-      if (category.hidden) return false;
-      if (category.id === 'assignments' && userData?.accountType !== 'Student') return false;
-
-      if (category.westernOnly) return isWestern;
-      if (category.indianClassicalOnly && isWestern) return false;
-
-      if ((category.id === 'laya' || category.id === 'tihai') && !isAuthorizedForLayaTihai) return false;
-
-      if (userData?.accountType === 'Instructor' && !isWestern) {
-        const styles = (userData?.musicSubStyleTypes || []).map((s: string) => s.toLowerCase());
-        const isPercussion = styles.some((s: string) => ['tabla', 'pakhavaj', 'pakhawaj', 'mridangam'].includes(s));
-        const isVocalOrMelody = styles.some((s: string) => !['tabla', 'pakhavaj', 'pakhawaj', 'mridangam'].includes(s));
-
-        if (category.id === 'raag' || category.id === 'songs' || category.id === 'laya' || category.id === 'tihai') {
-          return isVocalOrMelody;
-        }
-        if (category.id === 'taal') {
-          return isPercussion;
-        }
-      }
-
-      return true;
-    });
-  }, [userData, isWestern, isAuthorizedForLayaTihai]);
+  const visibleCategories = useMemo(
+    () => getVisibleLibraryCategories(userData, categoriesConfig),
+    [userData]
+  );
 
   const loadData = async (isRefreshing = false) => {
     if (!currentUser) return;
@@ -213,6 +173,7 @@ export default function Library() {
           <Text style={[styles.subtitle, { color: theme.textSecondary }]}>Your musical collection</Text>
         </View>
         <TouchableOpacity 
+          accessibilityLabel="Add to library"
           style={[styles.addBtn, { backgroundColor: theme.primary }]}
           onPress={() => router.push({
             pathname: '/library/create',
