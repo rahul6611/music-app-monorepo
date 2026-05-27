@@ -2,7 +2,7 @@ import './library.web.setup';
 import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react-native';
 import { getAllRaags } from '@music-app/firebase';
-import Library from '../library';
+import Library from '../../../app/(tabs)/library';
 import {
   mockRouterPush,
   mockAuthUser,
