@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { useRouter } from 'expo-router';
 import {
   View,
   Text,
@@ -85,6 +86,7 @@ export const PRACTICE_PLAN_PART_COLORS = [
 ];
 
 const StudentsNew = () => {
+  const router = useRouter();
   const theme = useTheme();
   const { user: currentUser } = useAuthStore();
   const [students, setStudents] = useState<Array<StudentUser & { firebaseUid: string }>>([]);
@@ -606,6 +608,14 @@ const StudentsNew = () => {
                 );
             })}
         </View>
+
+        <TouchableOpacity
+          style={[styles.joinClassBtn, { backgroundColor: theme.primary }]}
+          onPress={() => router.push(`/class/${ca.id}`)}
+        >
+          <MaterialIcons name="videocam" size={20} color="#FFF" />
+          <Text style={styles.joinClassBtnText}>Join Live Class</Text>
+        </TouchableOpacity>
       </View>
     );
   };
@@ -935,6 +945,20 @@ const styles = StyleSheet.create({
         ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 4 },
         android: { elevation: 2 },
     }),
+  },
+  joinClassBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    marginTop: 16,
+    paddingVertical: 12,
+    borderRadius: 12,
+  },
+  joinClassBtnText: {
+    color: '#FFF',
+    fontWeight: '700',
+    fontSize: 15,
   },
   cardHeader: {
     flexDirection: 'row',

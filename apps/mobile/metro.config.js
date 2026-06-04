@@ -1,3 +1,7 @@
+// App package is apps/mobile; npm workspaces hoist Metro's server root to the monorepo root by default,
+// which breaks release bundles (Metro looks for ./index.js at the repo root). Keep the server root here.
+process.env.EXPO_NO_METRO_WORKSPACE_ROOT = '1';
+
 const { getDefaultConfig } = require('expo/metro-config');
 const { withNativeWind } = require('nativewind/metro');
 const path = require('path');

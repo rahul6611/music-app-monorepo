@@ -46,6 +46,38 @@ export const updateClassAssignment = async (
   });
 };
 
+export const getClassAssignmentById = async (id: string): Promise<ClassAssignment | null> => {
+  const ref = doc(db, 'classAssignments', id);
+  const snap = await getDoc(ref);
+  if (!snap.exists()) return null;
+  return { id: snap.id, ...snap.data() } as ClassAssignment;
+};
+
+export const ensureJitsiRoomForAssignment = async (
+  id: string,
+  roomName: string
+): Promise<void> => {
+  const ref = doc(db, 'classAssignments', id);
+  await updateDoc(ref, {
+    jitsiRoomName: roomName,
+    updatedAt: serverTimestamp(),
+  });
+};
+
+export const setClassRecordingUrl = async (
+  id: string,
+  recordingUrl: string,
+  recordingPublicId?: string
+): Promise<void> => {
+  const ref = doc(db, 'classAssignments', id);
+  await updateDoc(ref, {
+    recordingUrl,
+    recordingPublicId: recordingPublicId || null,
+    lastRecordingAt: new Date().toISOString(),
+    updatedAt: serverTimestamp(),
+  });
+};
+
 export const getClassAssignmentsByStudent = async (
   studentId: string,
   instructorId?: string

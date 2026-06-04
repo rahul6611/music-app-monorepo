@@ -1,0 +1,7 @@
+services:
+  jibri:
+    environment:
+      # Use internal HTTPS so Selenium lands on a secure context.
+      # IMPORTANT: docker-jitsi-meet splits CHROMIUM_FLAGS by COMMA (not space).
+      - PUBLIC_URL=https://web
+      - CHROMIUM_FLAGS=--ignore-certificate-errors,--allow-insecure-localhost,--autoplay-policy=no-user-gesture-required

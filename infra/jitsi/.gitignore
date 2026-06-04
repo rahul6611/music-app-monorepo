@@ -1,0 +1,8 @@
+# Docker Jitsi runtime config (generated locally; includes sockets, certs, pid files)
+jitsi-meet-cfg/
+
+# Cloned official stack — see README.md setup steps
+jitsi-docker/
+
+# Local secrets (use .env.example as template)
+.env

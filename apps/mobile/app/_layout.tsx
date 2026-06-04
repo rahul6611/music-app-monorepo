@@ -127,6 +127,12 @@ export default function RootLayout() {
               }} 
             />
             <Stack.Screen name="modules/[id]" />
+            <Stack.Screen 
+              name="class/[assignmentId]" 
+              options={{ 
+                animation: 'slide_from_right',
+              }} 
+            />
           </Stack>
         </View>
         <CameraOverlay />

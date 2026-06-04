@@ -25,6 +25,12 @@ export interface ClassAssignment {
   classTime: string;
   assignments: AssignmentItem[];
   partMinutes?: number[];
+  /** Stable Jitsi room name for live class sessions */
+  jitsiRoomName?: string;
+  /** Cloudinary URL from Jibri recording (set by webhook or manual) */
+  recordingUrl?: string;
+  recordingPublicId?: string;
+  lastRecordingAt?: string;
   createdAt?: Timestamp | { seconds: number; nanoseconds: number; toMillis?: () => number };
   [key: string]: any;
 }
