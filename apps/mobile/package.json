@@ -14,7 +14,12 @@
     "desktop": "electron electron-main.js",
     "build:windows": "npm run build:web && electron-builder build --windows",
     "patch:webview-ssl": "node scripts/patch-webview-ssl.js",
-    "prebuild:android": "node scripts/patch-webview-ssl.js && expo prebuild --platform android --clean",
+    "patch:expo-updates-monorepo": "node scripts/patch-expo-updates-monorepo.js",
+    "postinstall": "node scripts/patch-expo-updates-monorepo.js",
+    "build:android:debug": "node scripts/patch-expo-updates-monorepo.js && node scripts/build-android-debug.js",
+    "build:android:release": "node scripts/patch-expo-updates-monorepo.js && node scripts/build-android-release.js",
+    "build:android:release:clean": "node scripts/patch-expo-updates-monorepo.js && node scripts/build-android-release.js --clean-native",
+    "prebuild:android": "node scripts/patch-webview-ssl.js && node scripts/patch-expo-updates-monorepo.js && expo prebuild --platform android --clean",
     "test": "jest --passWithNoTests"
   },
   "jest": {

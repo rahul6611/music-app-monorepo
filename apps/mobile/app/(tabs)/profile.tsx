@@ -176,6 +176,18 @@ export default function Profile() {
   };
 
   const handleLogout = async () => {
+    if (Platform.OS === 'web') {
+      const confirmLogout = window.confirm('Are you sure you want to sign out?');
+      if (confirmLogout) {
+        try {
+          await signOut(auth);
+        } catch (e) {
+          console.error('Error signing out:', e);
+        }
+      }
+      return;
+    }
+
     Alert.alert('Logout', 'Are you sure you want to sign out?', [
       { text: 'Cancel', style: 'cancel' },
       { 

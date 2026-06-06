@@ -14,9 +14,10 @@ const config = getDefaultConfig(projectRoot);
 // 1. Watch all files in the project root and workspace root (for packages)
 config.watchFolders = [projectRoot, workspaceRoot];
 
-// Exclude the nested my-expo-app from being watched or scanned
+// Exclude the nested my-expo-app and local Docker containers/infra from being watched or scanned
 config.resolver.blockList = [
-  /my-expo-app\/.*/
+  /my-expo-app\/.*/,
+  /[/\\]infra[/\\]/
 ];
 
 // Prioritize .mjs files for modern packages like Zustand

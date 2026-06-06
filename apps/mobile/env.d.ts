@@ -13,5 +13,9 @@ declare namespace NodeJS {
     EXPO_PUBLIC_CLOUDINARY_CLOUD_NAME: string;
     EXPO_PUBLIC_CLOUDINARY_UPLOAD_PRESET: string;
     EXPO_PUBLIC_JITSI_SERVER_URL?: string;
+    /** 480 | 720 | 1080 — max send/receive video height (default 720) */
+    EXPO_PUBLIC_JITSI_VIDEO_QUALITY?: string;
+    /** Set to "true" for music lessons (less aggressive noise suppression) */
+    EXPO_PUBLIC_JITSI_DISABLE_NOISE_SUPPRESSION?: string;
   }
 }

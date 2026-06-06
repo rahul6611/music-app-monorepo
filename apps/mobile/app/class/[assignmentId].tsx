@@ -25,6 +25,8 @@ import {
   buildClassSubject,
   buildJoinMeetingUrl,
   getJitsiServerUrl,
+  getJitsiVideoQualityPreset,
+  type JitsiNetworkStatus,
 } from '../../utils/jitsi';
 
 export default function LiveClassScreen() {
@@ -41,6 +43,9 @@ export default function LiveClassScreen() {
   const [contentOpen, setContentOpen] = useState(isWide);
   const [isRecording, setIsRecording] = useState(false);
   const [joined, setJoined] = useState(false);
+  const [networkStatus, setNetworkStatus] = useState<JitsiNetworkStatus>('good');
+  const [networkMessage, setNetworkMessage] = useState('');
+  const [networkBannerDismissed, setNetworkBannerDismissed] = useState(false);
 
   const displayName =
     user?.displayName || user?.email?.split('@')[0] || 'Musiki User';
@@ -113,6 +118,12 @@ export default function LiveClassScreen() {
   }
 
   const subject = buildClassSubject(assignment.classDate, assignment.classTime);
+  const videoQualityPreset = getJitsiVideoQualityPreset();
+  const showNetworkBanner =
+    joined &&
+    !networkBannerDismissed &&
+    networkStatus !== 'good' &&
+    !!networkMessage;
 
   return (
     <View style={[styles.root, { backgroundColor: theme.background }]}>
@@ -127,6 +138,7 @@ export default function LiveClassScreen() {
           <Text style={[styles.topBarMeta, { color: theme.textSecondary }]} numberOfLines={1}>
             Room: {roomName}
             {joined ? ' · Connected' : ' · Connecting…'}
+            {joined ? ` · ${videoQualityPreset}p` : ''}
             {isRecording ? ' · REC' : ''}
           </Text>
         </View>
@@ -172,6 +184,39 @@ export default function LiveClassScreen() {
         </View>
       </View>
 
+      {showNetworkBanner ? (
+        <View
+          style={[
+            styles.networkBanner,
+            {
+              backgroundColor: networkStatus === 'poor' ? '#3A1010' : '#3A2E10',
+              borderColor: networkStatus === 'poor' ? '#EF4444' : '#F59E0B',
+            },
+          ]}
+        >
+          <MaterialIcons
+            name={networkStatus === 'poor' ? 'signal-wifi-off' : 'signal-wifi-statusbar-connected-no-internet-4'}
+            size={18}
+            color={networkStatus === 'poor' ? '#FCA5A5' : '#FCD34D'}
+          />
+          <Text
+            style={[
+              styles.networkBannerText,
+              { color: networkStatus === 'poor' ? '#FCA5A5' : '#FDE68A' },
+            ]}
+          >
+            {networkMessage}
+          </Text>
+          <TouchableOpacity
+            onPress={() => setNetworkBannerDismissed(true)}
+            hitSlop={12}
+            accessibilityLabel="Dismiss network warning"
+          >
+            <MaterialIcons name="close" size={18} color={theme.textSecondary} />
+          </TouchableOpacity>
+        </View>
+      ) : null}
+
       <View style={styles.body}>
         <View style={[styles.meetingArea, !isWide && contentOpen && styles.meetingAreaSplit]}>
           <JitsiMeetingView
@@ -180,8 +225,18 @@ export default function LiveClassScreen() {
             subject={subject}
             userEmail={user?.email || ''}
             onHangup={handleHangup}
-            onJoined={() => setJoined(true)}
+            onJoined={() => {
+              setJoined(true);
+              setNetworkBannerDismissed(false);
+            }}
             onRecordingChange={setIsRecording}
+            onNetworkStatusChange={({ status, message }) => {
+              setNetworkStatus(status);
+              setNetworkMessage(message || '');
+              if (status !== 'good') {
+                setNetworkBannerDismissed(false);
+              }
+            }}
           />
           {!isWide && !contentOpen && (
             <ClassContentPanel
@@ -263,5 +318,21 @@ const styles = StyleSheet.create({
     fontSize: 10,
     textAlign: 'center',
     padding: 6,
+  },
+  networkBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginHorizontal: 12,
+    marginTop: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  networkBannerText: {
+    flex: 1,
+    fontSize: 12,
+    fontWeight: '600',
   },
 });

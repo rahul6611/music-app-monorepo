@@ -7,10 +7,13 @@
     "packages/*"
   ],
   "scripts": {
+    "postinstall": "node apps/mobile/scripts/patch-expo-updates-monorepo.js",
     "dev": "turbo run dev",
     "build": "turbo run build",
     "start": "turbo run start",
     "android": "turbo run android",
+    "build:android:debug": "npm run build:android:debug -w @music-app/mobile",
+    "build:android:release": "npm run build:android:release -w @music-app/mobile",
     "ios": "turbo run ios",
     "web": "turbo run web",
     "test": "turbo run test",
