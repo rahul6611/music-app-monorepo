@@ -1,0 +1,20 @@
+# Vercel Ignore File
+# Ignore heavy native development and cache directories
+
+node_modules/
+.expo/
+.expo-shared/
+dist_electron/
+android/
+ios/
+.kotlin/
+.cache/
+.vercel/
+dist/
+web-build/
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+*.pem

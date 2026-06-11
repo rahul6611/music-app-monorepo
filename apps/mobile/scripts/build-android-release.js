@@ -43,6 +43,9 @@ try {
   console.warn('[build-android-release] WebView SSL patch failed:', err.message);
 }
 
+console.log('[build-android-release] Ensuring react-native-audio-api prebuilt binaries...');
+execSync('node scripts/ensure-audio-api-binaries.js', { cwd: mobileRoot, stdio: 'inherit' });
+
 const env = {
   ...process.env,
   NODE_ENV: 'production',

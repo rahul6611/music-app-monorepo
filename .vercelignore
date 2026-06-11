@@ -1,0 +1,22 @@
+# Vercel Ignore File (Monorepo Root)
+
+node_modules/
+.expo/
+dist/
+web-build/
+dist_electron/
+android/
+ios/
+.turbo/
+.kotlin/
+.cache/
+.vercel/
+
+# Ignore local packages build files if any
+packages/*/node_modules/
+packages/*/dist/
+apps/*/android/
+apps/*/ios/
+apps/*/.expo/
+apps/*/dist/
+apps/*/dist_electron/

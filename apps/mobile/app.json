@@ -82,7 +82,17 @@
       "@react-native-community/datetimepicker",
       "expo-font",
       "expo-asset",
-      "./plugins/withAndroidJitsiNetworkSecurity.js"
+      "./plugins/withAndroidJitsiNetworkSecurity.js",
+      [
+        "react-native-audio-api",
+        {
+          "iosMicrophonePermission": "Allow this app to access your microphone for pitch practice.",
+          "androidPermissions": [
+            "android.permission.RECORD_AUDIO",
+            "android.permission.MODIFY_AUDIO_SETTINGS"
+          ]
+        }
+      ]
     ],
     "runtimeVersion": {
       "policy": "appVersion"

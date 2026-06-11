@@ -12,6 +12,11 @@ const env = {
   EXPO_NO_METRO_WORKSPACE_ROOT: '1',
 };
 
+const mobileRoot = path.join(__dirname, '..');
+
+console.log('[build-android-debug] Ensuring react-native-audio-api prebuilt binaries...');
+execSync('node scripts/ensure-audio-api-binaries.js', { cwd: mobileRoot, stdio: 'inherit' });
+
 console.log('[build-android-debug] Stopping Gradle daemons...');
 try {
   execSync('gradlew --stop', { cwd: androidDir, stdio: 'inherit', shell: true, env });
