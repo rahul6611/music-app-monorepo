@@ -13,6 +13,7 @@ import {
 import { usePitchAnalyzer } from '../../hooks/usePitchAnalyzer';
 import PitchGraph, { NOTE_FREQS, type GraphPitchSample, type MelodyNote, type PitchGraphMode } from './PitchGraph';
 import { exportPitchChartPng, exportPitchSamplesCsv } from './pitchChartExport';
+import PitchCsvReplayer from './PitchCsvReplayer';
 
 const SESSIONS_KEY = 'pitch-practice-sessions';
 
@@ -93,7 +94,7 @@ export default function PitchMonitor() {
   const [chartResetKey, setChartResetKey] = useState(0);
 
   const { isListening, error, currentSample, history, sampleRate, getSavedSamples, openAppSettings } =
-    usePitchAnalyzer({ enabled: listening, historySize: 2000 });
+    usePitchAnalyzer({ enabled: listening, historySize: 600 });
 
   // Anchor timeline to when the mic is actually live (not the button press)
   useEffect(() => {
@@ -636,6 +637,16 @@ export default function PitchMonitor() {
               />
             </View>
           </View>
+
+          <PitchCsvReplayer
+            key={
+              reviewSession
+                ? `session-${reviewSession.durationMs}-${reviewSession.samples.length}`
+                : 'no-session'
+            }
+            sessionSamples={reviewSession?.samples}
+            onStatus={setStatus}
+          />
 
           {error ? (
             <View style={styles.errorBlock}>

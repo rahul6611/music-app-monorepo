@@ -8,6 +8,7 @@ import {
   PITCH_CHART_CENTER_MIDI,
   PITCH_CHART_MAX_MIDI,
   PITCH_CHART_MIN_MIDI,
+  PITCH_SAMPLE_INTERVAL_MS,
   type PianoKey,
 } from '@music-app/utils';
 
@@ -48,7 +49,7 @@ export const NOTE_FREQS: Record<string, number> = {
   Ṡ: 523.25,
 };
 
-export const TIME_SLOT_MS = 250;
+export const TIME_SLOT_MS = PITCH_SAMPLE_INTERVAL_MS;
 const SLOT_WIDTH = 52;
 const AXIS_LEFT = 52;
 const AXIS_BOTTOM = 34;

@@ -7,3 +7,4 @@ export * from './notationParser';
 export * from './AutoPatternGeneration';
 export * from './pitchAnalysis';
 export * from './pianoFrequencies';
+export * from './pitchCsv';

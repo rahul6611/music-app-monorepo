@@ -16,6 +16,9 @@ export type PitchSession = {
 
 const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'] as const;
 
+/** Chart + mic sampling cadence — one reading every 250 ms (4 per second). */
+export const PITCH_SAMPLE_INTERVAL_MS = 250;
+
 /** Typical singing practice range — used to reject bad detections from chart scaling. */
 export const VOCAL_MIN_HZ = 80;
 export const VOCAL_MAX_HZ = 1100;
@@ -24,10 +27,40 @@ export function isVocalFrequency(frequencyHz: number): boolean {
   return frequencyHz >= VOCAL_MIN_HZ && frequencyHz <= VOCAL_MAX_HZ;
 }
 
+type RawPitchReading = { frequencyHz: number | null; clarity: number };
+
 /**
- * Reject single-frame octave spikes by comparing to a short median history.
- * Returns null when the reading is outside the vocal range.
+ * Collapse many per-frame detections into one 250 ms sample.
+ * Uses the median Hz of confident readings so brief noise spikes are ignored
+ * without blocking real note changes (unlike cross-window median locking).
  */
+export function aggregatePitchWindow(
+  readings: RawPitchReading[],
+  options: { minClarity?: number } = {},
+): { frequencyHz: number | null; clarity: number } {
+  const { minClarity = 0.5 } = options;
+  if (readings.length === 0) return { frequencyHz: null, clarity: 0 };
+
+  const confident = readings.filter(
+    (r) =>
+      r.frequencyHz != null &&
+      r.clarity >= minClarity &&
+      isVocalFrequency(r.frequencyHz),
+  );
+
+  if (confident.length === 0) {
+    const best = readings.reduce((a, b) => (b.clarity > a.clarity ? b : a));
+    return { frequencyHz: null, clarity: best.clarity };
+  }
+
+  const sorted = [...confident].sort((a, b) => a.frequencyHz! - b.frequencyHz!);
+  const medianHz = sorted[Math.floor(sorted.length / 2)].frequencyHz!;
+  const avgClarity = confident.reduce((sum, r) => sum + r.clarity, 0) / confident.length;
+
+  return { frequencyHz: medianHz, clarity: avgClarity };
+}
+
+/** @deprecated Use aggregatePitchWindow per interval instead — this locked onto one note. */
 export function stabilizeDetectedFrequency(
   frequencyHz: number | null,
   clarity: number,
@@ -149,11 +182,19 @@ export function formatNoteLabel(note: string): string {
 export function updateStablePitchReadout(
   previous: StablePitchReadout | null,
   sample: PitchSample | null,
-  options: { smoothing?: number; minClarity?: number } = {},
+  options: { smoothing?: number; minClarity?: number; noteChangeCents?: number } = {},
 ): StablePitchReadout | null {
-  const { smoothing = 0.35, minClarity = 0.58 } = options;
+  const { smoothing = 0.35, minClarity = 0.58, noteChangeCents = 90 } = options;
   if (!sample?.frequencyHz || sample.clarity < minClarity) {
     return previous;
+  }
+
+  if (
+    previous?.frequencyHz &&
+    Math.abs(1200 * Math.log2(sample.frequencyHz / previous.frequencyHz)) >= noteChangeCents
+  ) {
+    const note = sample.note ?? frequencyToNote(sample.frequencyHz).note;
+    return { frequencyHz: sample.frequencyHz, note, noteLabel: formatNoteLabel(note) };
   }
 
   const frequencyHz = previous

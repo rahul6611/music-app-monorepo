@@ -2,9 +2,10 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Linking, Platform } from 'react-native';
 import { AudioModule } from 'expo-audio';
 import {
+  aggregatePitchWindow,
   buildPitchSample,
   detectPitchHz,
-  stabilizeDetectedFrequency,
+  PITCH_SAMPLE_INTERVAL_MS,
   type PitchSample,
 } from '@music-app/utils';
 
@@ -14,7 +15,10 @@ type UsePitchAnalyzerOptions = {
   minHz?: number;
   maxHz?: number;
   historySize?: number;
+  sampleIntervalMs?: number;
 };
+
+type RawReading = { frequencyHz: number | null; clarity: number };
 
 type AudioBufferLike = {
   getChannelData: (channel: number) => Float32Array;
@@ -74,6 +78,7 @@ export function usePitchAnalyzer(options: UsePitchAnalyzerOptions = {}) {
     minHz = 65,
     maxHz = 1200,
     historySize = 120,
+    sampleIntervalMs = PITCH_SAMPLE_INTERVAL_MS,
   } = options;
 
   const [isListening, setIsListening] = useState(false);
@@ -95,10 +100,15 @@ export function usePitchAnalyzer(options: UsePitchAnalyzerOptions = {}) {
   } | null>(null);
   const savedRef = useRef<PitchSample[]>([]);
   const activeRef = useRef(false);
-  const recentHzRef = useRef<number[]>([]);
+  const windowReadingsRef = useRef<RawReading[]>([]);
+  const lastCommitMsRef = useRef(0);
+  const commitWindowRef = useRef<(timestamp: number) => void>(() => {});
 
   const stop = useCallback(async () => {
     activeRef.current = false;
+    if (windowReadingsRef.current.length > 0) {
+      commitWindowRef.current(Date.now());
+    }
     const recorder = recorderRef.current;
     recorderRef.current = null;
 
@@ -123,9 +133,22 @@ export function usePitchAnalyzer(options: UsePitchAnalyzerOptions = {}) {
 
     setError(null);
     savedRef.current = [];
-    recentHzRef.current = [];
+    windowReadingsRef.current = [];
+    lastCommitMsRef.current = 0;
     setHistory([]);
     setCurrentSample(null);
+
+    const commitWindow = (timestamp: number) => {
+      const aggregated = aggregatePitchWindow(windowReadingsRef.current);
+      windowReadingsRef.current = [];
+      lastCommitMsRef.current = timestamp;
+
+      const sample = buildPitchSample(aggregated.frequencyHz, aggregated.clarity, timestamp);
+      setCurrentSample(sample);
+      savedRef.current.push(sample);
+      setHistory((prev) => [...prev.slice(-(historySize - 1)), sample]);
+    };
+    commitWindowRef.current = commitWindow;
 
     try {
       const permission = await ensureMicrophonePermission();
@@ -162,21 +185,23 @@ export function usePitchAnalyzer(options: UsePitchAnalyzerOptions = {}) {
         void stop();
       });
 
+      activeRef.current = true;
+      setIsListening(true);
+      lastCommitMsRef.current = Date.now();
+
       const readyResult = recorder.onAudioReady(
         { sampleRate: preferredSampleRate, bufferLength: fftSize, channelCount: 1 },
         ({ buffer }: { buffer: unknown }) => {
+          if (!activeRef.current) return;
+
           const { samples, sampleRate: bufferRate } = extractMonoBuffer(buffer);
           const detected = detectPitchHz(samples, bufferRate, minHz, maxHz);
-          const stabilized = stabilizeDetectedFrequency(
-            detected.frequencyHz,
-            detected.clarity,
-            recentHzRef.current,
-          );
-          recentHzRef.current = stabilized.recentHz;
-          const sample = buildPitchSample(stabilized.frequencyHz, detected.clarity, Date.now());
-          setCurrentSample(sample);
-          savedRef.current.push(sample);
-          setHistory((prev) => [...prev.slice(-(historySize - 1)), sample]);
+          windowReadingsRef.current.push(detected);
+
+          const now = Date.now();
+          if (now - lastCommitMsRef.current >= sampleIntervalMs) {
+            commitWindow(now);
+          }
         },
       );
 
@@ -201,7 +226,7 @@ export function usePitchAnalyzer(options: UsePitchAnalyzerOptions = {}) {
       );
       await stop();
     }
-  }, [fftSize, historySize, maxHz, minHz, stop]);
+  }, [fftSize, historySize, maxHz, minHz, sampleIntervalMs, stop]);
 
   useEffect(() => {
     if (enabled && !activeRef.current) {

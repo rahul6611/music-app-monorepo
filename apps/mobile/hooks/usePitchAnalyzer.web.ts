@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
+  aggregatePitchWindow,
   buildPitchSample,
   detectPitchHz,
-  stabilizeDetectedFrequency,
+  PITCH_SAMPLE_INTERVAL_MS,
   type PitchSample,
 } from '@music-app/utils';
 
@@ -12,7 +13,10 @@ type UsePitchAnalyzerOptions = {
   minHz?: number;
   maxHz?: number;
   historySize?: number;
+  sampleIntervalMs?: number;
 };
+
+type RawReading = { frequencyHz: number | null; clarity: number };
 
 export function usePitchAnalyzer(options: UsePitchAnalyzerOptions = {}) {
   const {
@@ -21,6 +25,7 @@ export function usePitchAnalyzer(options: UsePitchAnalyzerOptions = {}) {
     minHz = 65,
     maxHz = 1200,
     historySize = 120,
+    sampleIntervalMs = PITCH_SAMPLE_INTERVAL_MS,
   } = options;
 
   const [isListening, setIsListening] = useState(false);
@@ -36,13 +41,31 @@ export function usePitchAnalyzer(options: UsePitchAnalyzerOptions = {}) {
   const bufferRef = useRef<Float32Array | null>(null);
   const savedRef = useRef<PitchSample[]>([]);
   const activeRef = useRef(false);
-  const recentHzRef = useRef<number[]>([]);
+  const windowReadingsRef = useRef<RawReading[]>([]);
+  const lastCommitMsRef = useRef(0);
+
+  const commitWindow = useCallback(
+    (timestamp: number) => {
+      const aggregated = aggregatePitchWindow(windowReadingsRef.current);
+      windowReadingsRef.current = [];
+      lastCommitMsRef.current = timestamp;
+
+      const sample = buildPitchSample(aggregated.frequencyHz, aggregated.clarity, timestamp);
+      setCurrentSample(sample);
+      savedRef.current.push(sample);
+      setHistory((prev) => [...prev.slice(-(historySize - 1)), sample]);
+    },
+    [historySize],
+  );
 
   const stop = useCallback(async () => {
     activeRef.current = false;
     if (rafRef.current != null) {
       cancelAnimationFrame(rafRef.current);
       rafRef.current = null;
+    }
+    if (windowReadingsRef.current.length > 0) {
+      commitWindow(Date.now());
     }
     streamRef.current?.getTracks().forEach((track) => track.stop());
     streamRef.current = null;
@@ -52,7 +75,7 @@ export function usePitchAnalyzer(options: UsePitchAnalyzerOptions = {}) {
       contextRef.current = null;
     }
     setIsListening(false);
-  }, []);
+  }, [commitWindow]);
 
   const start = useCallback(async () => {
     if (activeRef.current) {
@@ -61,7 +84,8 @@ export function usePitchAnalyzer(options: UsePitchAnalyzerOptions = {}) {
 
     setError(null);
     savedRef.current = [];
-    recentHzRef.current = [];
+    windowReadingsRef.current = [];
+    lastCommitMsRef.current = 0;
     setHistory([]);
     setCurrentSample(null);
 
@@ -84,6 +108,7 @@ export function usePitchAnalyzer(options: UsePitchAnalyzerOptions = {}) {
       setSampleRate(context.sampleRate);
       activeRef.current = true;
       setIsListening(true);
+      lastCommitMsRef.current = Date.now();
 
       const tick = () => {
         if (!activeRef.current) return;
@@ -99,16 +124,13 @@ export function usePitchAnalyzer(options: UsePitchAnalyzerOptions = {}) {
 
         analyserNode.getFloatTimeDomainData(buffer as any);
         const detected = detectPitchHz(buffer, audioContext.sampleRate, minHz, maxHz);
-        const stabilized = stabilizeDetectedFrequency(
-          detected.frequencyHz,
-          detected.clarity,
-          recentHzRef.current,
-        );
-        recentHzRef.current = stabilized.recentHz;
-        const sample = buildPitchSample(stabilized.frequencyHz, detected.clarity, Date.now());
-        setCurrentSample(sample);
-        savedRef.current.push(sample);
-        setHistory((prev) => [...prev.slice(-(historySize - 1)), sample]);
+        windowReadingsRef.current.push(detected);
+
+        const now = Date.now();
+        if (now - lastCommitMsRef.current >= sampleIntervalMs) {
+          commitWindow(now);
+        }
+
         rafRef.current = requestAnimationFrame(tick);
       };
 
@@ -117,7 +139,7 @@ export function usePitchAnalyzer(options: UsePitchAnalyzerOptions = {}) {
       setError(err?.message ?? 'Microphone access failed');
       await stop();
     }
-  }, [fftSize, historySize, maxHz, minHz, stop]);
+  }, [commitWindow, fftSize, maxHz, minHz, sampleIntervalMs, stop]);
 
   useEffect(() => {
     if (enabled && !activeRef.current) {

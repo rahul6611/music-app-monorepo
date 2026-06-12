@@ -8,7 +8,7 @@ import {
   normalizeToTargetOctave,
   scorePitchCloseness,
   scorePitchMatch,
-  stabilizeDetectedFrequency,
+  aggregatePitchWindow,
   updateStablePitchReadout,
   westernNoteToSwara,
 } from '../pitchAnalysis';
@@ -127,10 +127,24 @@ describe('pitchAnalysis', () => {
     expect(isVocalFrequency(2000)).toBe(false);
   });
 
-  it('replaces outlier spikes with the recent median', () => {
-    const recent = [290, 292, 294, 293, 291];
-    const { frequencyHz } = stabilizeDetectedFrequency(580, 0.9, recent);
-    expect(frequencyHz).toBe(292);
+  it('aggregates a 250ms window to the median confident reading', () => {
+    const readings = [
+      { frequencyHz: 290, clarity: 0.8 },
+      { frequencyHz: 294, clarity: 0.85 },
+      { frequencyHz: 580, clarity: 0.7 },
+      { frequencyHz: 292, clarity: 0.82 },
+    ];
+    const { frequencyHz } = aggregatePitchWindow(readings);
+    expect(frequencyHz).toBeGreaterThan(288);
+    expect(frequencyHz).toBeLessThan(296);
+  });
+
+  it('jumps stable readout when the note changes', () => {
+    const good = buildPitchSample(277, 0.9);
+    const stable = updateStablePitchReadout(null, good);
+    const nextNote = buildPitchSample(330, 0.9);
+    const jumped = updateStablePitchReadout(stable, nextNote);
+    expect(jumped?.frequencyHz).toBe(330);
   });
 
   it('scores matching pitch sequences', () => {
