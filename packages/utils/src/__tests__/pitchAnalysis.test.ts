@@ -69,6 +69,17 @@ describe('pitchAnalysis', () => {
 
   it('maps frequency to note', () => {
     expect(frequencyToNote(440).note).toBe('A4');
+    expect(frequencyToNote(880).note).toBe('A5');
+  });
+
+  it('detects 880 Hz as A5 (not octave-down A4)', () => {
+    const sampleRate = 44100;
+    const buffer = sineWave(880, sampleRate);
+    const result = detectPitchHz(buffer, sampleRate);
+    expect(result.frequencyHz).not.toBeNull();
+    expect(result.frequencyHz!).toBeGreaterThan(820);
+    expect(result.frequencyHz!).toBeLessThan(940);
+    expect(frequencyToNote(result.frequencyHz!).note).toBe('A5');
   });
 
   it('keeps raw frequency when clarity is low but drops note mapping', () => {

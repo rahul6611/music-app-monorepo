@@ -3,6 +3,14 @@ export type PitchCsvRow = {
   frequencyHz: number | null;
 };
 
+export type PitchCsvExportSample = {
+  elapsedMs: number;
+  frequencyHz: number | null;
+  note?: string | null;
+  cents?: number | null;
+  clarity?: number;
+};
+
 export type PitchPlaybackSegment = {
   startMs: number;
   endMs: number;
@@ -141,6 +149,50 @@ export function buildPitchPlaybackSchedule(
   }
 
   return segments;
+}
+
+function escapeCsvCell(value: string | number | null | undefined): string {
+  if (value == null || value === '') return '';
+  const text = String(value);
+  if (/[",\n\r]/.test(text)) return `"${text.replace(/"/g, '""')}"`;
+  return text;
+}
+
+function formatCsvFrequency(hz: number | null | undefined): string {
+  if (hz == null || hz <= 0) return '';
+  return hz.toFixed(1);
+}
+
+function formatCsvConfidence(clarity: number | undefined): string {
+  return String(Math.round((clarity ?? 0) * 100));
+}
+
+export function serializePitchSamplesCsv(samples: PitchCsvExportSample[]): string {
+  const header = 'Time (ms),Time (s),Frequency (Hz),Note,Cents,Confidence (%)';
+  const rows = samples.map((sample) => {
+    const timeMs = Math.max(0, Math.round(sample.elapsedMs));
+    const timeSec = (timeMs / 1000).toFixed(2);
+    return [
+      timeMs,
+      timeSec,
+      formatCsvFrequency(sample.frequencyHz),
+      sample.note ?? '',
+      sample.cents != null ? Math.round(sample.cents) : '',
+      formatCsvConfidence(sample.clarity),
+    ]
+      .map(escapeCsvCell)
+      .join(',');
+  });
+
+  return `\uFEFF${[header, ...rows].join('\r\n')}`;
+}
+
+export function buildPitchCsvFilename(sessionDurationMs: number, samples: PitchCsvExportSample[] = []): string {
+  const durationMs =
+    sessionDurationMs > 0 ? sessionDurationMs : samples[samples.length - 1]?.elapsedMs ?? 0;
+  const durationSec = Math.max(0, Math.round(durationMs / 1000));
+  const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
+  return `pitch-samples-${durationSec}s-${stamp}.csv`;
 }
 
 export function summarizePitchCsvRows(rows: PitchCsvRow[]): {

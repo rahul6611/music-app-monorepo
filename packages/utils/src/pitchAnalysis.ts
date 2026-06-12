@@ -6,6 +6,8 @@ export type PitchSample = {
   cents: number | null;
 };
 
+import { frequencyToMidiFloat, midiToNoteName } from './pianoFrequencies';
+
 export type PitchSession = {
   id: string;
   startedAt: number;
@@ -13,8 +15,6 @@ export type PitchSession = {
   sampleRate: number;
   samples: PitchSample[];
 };
-
-const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'] as const;
 
 /** Chart + mic sampling cadence — one reading every 250 ms (4 per second). */
 export const PITCH_SAMPLE_INTERVAL_MS = 250;
@@ -91,6 +91,42 @@ export function stabilizeDetectedFrequency(
   return { frequencyHz, recentHz: nextRecent };
 }
 
+/**
+ * Autocorrelation often locks onto an octave below the true pitch (880 → 440).
+ * Walk up while the double-frequency (half-lag) peak is comparably strong.
+ */
+export function resolveUpperOctaveLag(
+  lag: number,
+  correlations: Float32Array,
+  minLag: number,
+  maxLag: number,
+  minCorrelationRatio = 0.82,
+  maxSteps = 3,
+): number {
+  let resolvedLag = lag;
+
+  for (let step = 0; step < maxSteps; step++) {
+    const halfLag = resolvedLag / 2;
+    if (halfLag < minLag) break;
+
+    const higherIdx = Math.round(halfLag);
+    const lowerIdx = Math.round(resolvedLag);
+    if (higherIdx < minLag || higherIdx > maxLag || lowerIdx < minLag || lowerIdx > maxLag) {
+      break;
+    }
+
+    const higherCorr = correlations[higherIdx];
+    const lowerCorr = correlations[lowerIdx];
+    if (higherCorr >= lowerCorr * minCorrelationRatio) {
+      resolvedLag = halfLag;
+    } else {
+      break;
+    }
+  }
+
+  return resolvedLag;
+}
+
 /** Autocorrelation pitch detection. Returns Hz or null if no clear pitch. */
 export function detectPitchHz(
   buffer: Float32Array,
@@ -137,16 +173,19 @@ export function detectPitchHz(
     return { frequencyHz: null, clarity: 0 };
   }
 
-  let resolvedLag = bestLag;
-  if (bestLag > minLag && bestLag < maxLag) {
-    const y1 = correlations[bestLag - 1];
-    const y2 = correlations[bestLag];
-    const y3 = correlations[bestLag + 1];
+  const octaveCorrectedLag = resolveUpperOctaveLag(bestLag, correlations, minLag, maxLag);
+
+  let resolvedLag = octaveCorrectedLag;
+  if (octaveCorrectedLag > minLag && octaveCorrectedLag < maxLag) {
+    const centerLag = Math.round(octaveCorrectedLag);
+    const y1 = correlations[centerLag - 1];
+    const y2 = correlations[centerLag];
+    const y3 = correlations[centerLag + 1];
     const denom = 2 * y2 - y1 - y3;
     if (denom !== 0) {
       const delta = (y3 - y1) / (2 * denom);
       if (Number.isFinite(delta) && Math.abs(delta) < 1) {
-        resolvedLag = bestLag + delta;
+        resolvedLag = centerLag + delta;
       }
     }
   }
@@ -210,12 +249,10 @@ export function updateStablePitchReadout(
 }
 
 export function frequencyToNote(frequencyHz: number, a4 = 440): { note: string; cents: number } {
-  const semitonesFromA4 = 12 * Math.log2(frequencyHz / a4);
-  const rounded = Math.round(semitonesFromA4);
-  const cents = Math.round((semitonesFromA4 - rounded) * 100);
-  const noteIndex = ((rounded % 12) + 12 + 9) % 12;
-  const octave = 4 + Math.floor((rounded + 9) / 12);
-  return { note: `${NOTE_NAMES[noteIndex]}${octave}`, cents };
+  const midi = frequencyToMidiFloat(frequencyHz, a4);
+  const midiRounded = Math.round(midi);
+  const cents = Math.round((midi - midiRounded) * 100);
+  return { note: midiToNoteName(midiRounded), cents };
 }
 
 /** Shift detected pitch into the octave closest to the target note. */

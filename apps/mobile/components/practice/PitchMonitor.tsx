@@ -633,7 +633,7 @@ export default function PitchMonitor() {
                 targetMelody={activeMelody.notes}
                 mode={chartMode}
                 resetKey={chartResetKey}
-                height={400}
+                height={560}
               />
             </View>
           </View>

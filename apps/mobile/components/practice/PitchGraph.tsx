@@ -1,10 +1,10 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { View, StyleSheet, Text, ScrollView } from 'react-native';
 import {
-  buildPianoRangeBetweenMidi,
-  buildPianoRangeForSamples,
-  frequencyToAxisRatio,
+  buildPitchChartPianoKeys,
+  frequencyToChartAxisRatio,
   isVocalFrequency,
+  midiToChartAxisRatio,
   PITCH_CHART_CENTER_MIDI,
   PITCH_CHART_MAX_MIDI,
   PITCH_CHART_MIN_MIDI,
@@ -55,10 +55,8 @@ const AXIS_LEFT = 52;
 const AXIS_BOTTOM = 34;
 const CHART_PADDING_Y = 14;
 const PLAYHEAD_VIEWPORT_RATIO = 0.35;
-const PIANO_SEMITONES_BELOW = 5;
-const PIANO_SEMITONES_ABOVE = 10;
-const PITCH_PADDING_SEMITONES = 2;
 const IDLE_TIMELINE_MS = 3000;
+const Y_LABEL_HALF_HEIGHT = 9;
 
 function shouldShowYLabel(index: number, total: number): boolean {
   if (total <= 13) return true;
@@ -77,67 +75,23 @@ export default function PitchGraph({
 }: PitchGraphProps) {
   const [viewportWidth, setViewportWidth] = useState(320);
   const scrollRef = useRef<ScrollView>(null);
-  const expandedMaxMidiRef = useRef<number | null>(null);
-  const expandedMinMidiRef = useRef<number | null>(null);
 
-  const sampleHz = useMemo(
-    () =>
-      samples
-        .map((s) => s.frequencyHz)
-        .filter((hz): hz is number => hz != null && hz > 0 && isVocalFrequency(hz)),
-    [samples],
-  );
+  const pianoKeys = useMemo(() => buildPitchChartPianoKeys(), []);
 
-  const pianoKeys = useMemo(() => {
-    const keys = buildPianoRangeForSamples(
-      sampleHz,
-      PITCH_CHART_CENTER_MIDI,
-      PIANO_SEMITONES_BELOW,
-      PIANO_SEMITONES_ABOVE,
-      PITCH_PADDING_SEMITONES,
-    );
-
-    if (mode !== 'live' || keys.length === 0) {
-      return keys;
-    }
-
-    const minMidi = keys[0].midi;
-    const maxMidi = keys[keys.length - 1].midi;
-    const stickyMin = Math.max(
-      PITCH_CHART_MIN_MIDI,
-      expandedMinMidiRef.current == null
-        ? minMidi
-        : Math.min(minMidi, expandedMinMidiRef.current),
-    );
-    const stickyMax = Math.min(
-      PITCH_CHART_MAX_MIDI,
-      expandedMaxMidiRef.current == null
-        ? maxMidi
-        : Math.max(maxMidi, expandedMaxMidiRef.current),
-    );
-
-    expandedMinMidiRef.current = stickyMin;
-    expandedMaxMidiRef.current = stickyMax;
-
-    if (stickyMin === minMidi && stickyMax === maxMidi) {
-      return keys;
-    }
-
-    return buildPianoRangeBetweenMidi(stickyMin, stickyMax);
-  }, [sampleHz, mode]);
-
-  useEffect(() => {
-    expandedMinMidiRef.current = null;
-    expandedMaxMidiRef.current = null;
-  }, [resetKey]);
-
-  const minHz = pianoKeys[0]?.frequencyHz ?? 164.81;
-  const maxHz = pianoKeys[pianoKeys.length - 1]?.frequencyHz ?? 392.0;
   const chartHeight = height - AXIS_BOTTOM;
   const usableHeight = chartHeight - CHART_PADDING_Y * 2;
 
+  const midiToY = (midi: number) => {
+    const ratio = midiToChartAxisRatio(midi, PITCH_CHART_MIN_MIDI, PITCH_CHART_MAX_MIDI);
+    return CHART_PADDING_Y + (1 - ratio) * usableHeight;
+  };
+
   const freqToY = (freq: number) => {
-    const ratio = frequencyToAxisRatio(freq, minHz, maxHz);
+    const ratio = frequencyToChartAxisRatio(
+      freq,
+      PITCH_CHART_MIN_MIDI,
+      PITCH_CHART_MAX_MIDI,
+    );
     return CHART_PADDING_Y + (1 - ratio) * usableHeight;
   };
 
@@ -171,7 +125,7 @@ export default function PitchGraph({
         left: msToX(sample.elapsedMs),
         top: freqToY(sample.frequencyHz!),
       }));
-  }, [samples, timelineMs, minHz, maxHz, usableHeight, slotWidth]);
+  }, [samples, timelineMs, usableHeight, slotWidth]);
 
   const lineSegments = useMemo(() => {
     const valid = samples.filter(
@@ -205,7 +159,7 @@ export default function PitchGraph({
     }
 
     return segments;
-  }, [samples, timelineMs, minHz, maxHz, usableHeight, slotWidth]);
+  }, [samples, timelineMs, usableHeight, slotWidth]);
 
   const playheadX = msToX(currentTimeMs);
   const isLive = mode === 'live';
@@ -240,13 +194,13 @@ export default function PitchGraph({
     const labels: { key: PianoKey; y: number }[] = [];
     reversedKeys.forEach((key, index) => {
       if (!shouldShowYLabel(index, reversedKeys.length)) return;
-      const y = freqToY(key.frequencyHz);
+      const y = midiToY(key.midi);
       if (y - lastY < 14) return;
       lastY = y;
       labels.push({ key, y });
     });
     return labels;
-  }, [reversedKeys, minHz, maxHz, usableHeight]);
+  }, [reversedKeys, usableHeight]);
 
   return (
     <View
@@ -263,7 +217,11 @@ export default function PitchGraph({
             return (
               <Text
                 key={key.name}
-                style={[styles.yLabel, { top: y - 9 }, isCenter && styles.yLabelCenter]}
+                style={[
+                  styles.yLabel,
+                  { top: y - Y_LABEL_HALF_HEIGHT },
+                  isCenter && styles.yLabelCenter,
+                ]}
               >
                 {key.name}
               </Text>
@@ -282,7 +240,7 @@ export default function PitchGraph({
           <View style={{ width: contentWidth, flex: 1 }}>
             <View style={[styles.chartArea, { width: contentWidth, height: chartHeight }]}>
               {pianoKeys.map((key) => {
-                const y = freqToY(key.frequencyHz);
+                const y = midiToY(key.midi);
                 const isCenter = key.midi === PITCH_CHART_CENTER_MIDI;
                 return (
                   <View
@@ -368,6 +326,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     textAlign: 'right',
     lineHeight: 18,
+    includeFontPadding: false,
   },
   yLabelCenter: {
     color: '#A78BFA',

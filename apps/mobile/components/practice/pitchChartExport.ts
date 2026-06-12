@@ -1,8 +1,13 @@
 import {
-  buildPianoRangeForSamples,
-  frequencyToAxisRatio,
+  buildPitchChartPianoKeys,
+  buildPitchCsvFilename,
+  frequencyToChartAxisRatio,
   isVocalFrequency,
+  midiToChartAxisRatio,
   PITCH_CHART_CENTER_MIDI,
+  PITCH_CHART_MAX_MIDI,
+  PITCH_CHART_MIN_MIDI,
+  serializePitchSamplesCsv,
 } from '@music-app/utils';
 import type { GraphPitchSample } from './PitchGraph';
 import { TIME_SLOT_MS } from './PitchGraph';
@@ -11,10 +16,8 @@ const SLOT_WIDTH = 52;
 const AXIS_LEFT = 56;
 const AXIS_BOTTOM = 34;
 const CHART_PADDING_Y = 14;
-const PIANO_SEMITONES_BELOW = 5;
-const PIANO_SEMITONES_ABOVE = 10;
-const MIN_PX_PER_NOTE = 22;
-const MIN_CHART_PLOT_HEIGHT = 366;
+const MIN_PX_PER_NOTE = 10;
+const MIN_CHART_PLOT_HEIGHT = 520;
 
 function shouldShowYLabel(index: number, total: number): boolean {
   if (total <= 13) return true;
@@ -26,13 +29,6 @@ function computePlotHeight(noteCount: number): number {
   return Math.max(MIN_CHART_PLOT_HEIGHT, noteCount * MIN_PX_PER_NOTE);
 }
 
-function escapeCsvCell(value: string | number | null | undefined): string {
-  if (value == null || value === '') return '';
-  const text = String(value);
-  if (/[",\n\r]/.test(text)) return `"${text.replace(/"/g, '""')}"`;
-  return text;
-}
-
 function downloadTextFile(content: string, filename: string, mimeType: string): void {
   const link = document.createElement('a');
   link.download = filename;
@@ -41,27 +37,7 @@ function downloadTextFile(content: string, filename: string, mimeType: string): 
   URL.revokeObjectURL(link.href);
 }
 
-function formatCsvFrequency(hz: number | null): string {
-  if (hz == null || hz <= 0) return '';
-  return hz.toFixed(1);
-}
-
-function formatCsvConfidence(clarity: number): string {
-  return String(Math.round(clarity * 100));
-}
-
-export function buildPitchCsvFilename(
-  sessionDurationMs: number,
-  samples: GraphPitchSample[] = [],
-): string {
-  const durationMs =
-    sessionDurationMs > 0
-      ? sessionDurationMs
-      : samples[samples.length - 1]?.elapsedMs ?? 0;
-  const durationSec = Math.max(0, Math.round(durationMs / 1000));
-  const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
-  return `pitch-samples-${durationSec}s-${stamp}.csv`;
-}
+export { buildPitchCsvFilename };
 
 export function exportPitchSamplesCsv(
   samples: GraphPitchSample[],
@@ -69,25 +45,8 @@ export function exportPitchSamplesCsv(
 ): void {
   if (typeof document === 'undefined') return;
 
-  const header = 'Time (ms),Time (s),Frequency (Hz),Note,Cents,Confidence (%)';
-  const rows = samples.map((sample) => {
-    const timeMs = Math.max(0, Math.round(sample.elapsedMs));
-    const timeSec = (timeMs / 1000).toFixed(2);
-    return [
-      timeMs,
-      timeSec,
-      formatCsvFrequency(sample.frequencyHz),
-      sample.note ?? '',
-      sample.cents != null ? Math.round(sample.cents) : '',
-      formatCsvConfidence(sample.clarity),
-    ]
-      .map(escapeCsvCell)
-      .join(',');
-  });
-
-  const csvBody = [header, ...rows].join('\r\n');
   downloadTextFile(
-    `\uFEFF${csvBody}`,
+    serializePitchSamplesCsv(samples),
     buildPitchCsvFilename(sessionDurationMs, samples),
     'text/csv;charset=utf-8',
   );
@@ -100,20 +59,7 @@ export function exportPitchChartPng(
 ): void {
   if (typeof document === 'undefined') return;
 
-  const sampleHz = samples
-    .map((s) => s.frequencyHz)
-    .filter((hz): hz is number => hz != null && hz > 0 && isVocalFrequency(hz));
-
-  const pianoKeys = buildPianoRangeForSamples(
-    sampleHz,
-    PITCH_CHART_CENTER_MIDI,
-    PIANO_SEMITONES_BELOW,
-    PIANO_SEMITONES_ABOVE,
-    2,
-  );
-
-  const minHz = pianoKeys[0].frequencyHz;
-  const maxHz = pianoKeys[pianoKeys.length - 1].frequencyHz;
+  const pianoKeys = buildPitchChartPianoKeys();
   const chartHeight = computePlotHeight(pianoKeys.length);
   const usableHeight = chartHeight - CHART_PADDING_Y * 2;
   const totalHeight = chartHeight + AXIS_BOTTOM;
@@ -124,8 +70,12 @@ export function exportPitchChartPng(
   const totalWidth = AXIS_LEFT + contentWidth;
 
   const msToX = (ms: number) => (ms / TIME_SLOT_MS) * SLOT_WIDTH;
+  const midiToY = (midi: number) => {
+    const ratio = midiToChartAxisRatio(midi, PITCH_CHART_MIN_MIDI, PITCH_CHART_MAX_MIDI);
+    return CHART_PADDING_Y + (1 - ratio) * usableHeight;
+  };
   const freqToY = (freq: number) => {
-    const ratio = frequencyToAxisRatio(freq, minHz, maxHz);
+    const ratio = frequencyToChartAxisRatio(freq, PITCH_CHART_MIN_MIDI, PITCH_CHART_MAX_MIDI);
     return CHART_PADDING_Y + (1 - ratio) * usableHeight;
   };
 
@@ -159,7 +109,7 @@ export function exportPitchChartPng(
 
   for (let i = 0; i < reversedKeys.length; i++) {
     const key = reversedKeys[i];
-    const y = freqToY(key.frequencyHz);
+    const y = midiToY(key.midi);
     const isCenter = key.midi === PITCH_CHART_CENTER_MIDI;
 
     ctx.strokeStyle = isCenter ? '#4C4860' : '#2E2A3F';

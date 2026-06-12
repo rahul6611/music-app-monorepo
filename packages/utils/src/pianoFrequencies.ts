@@ -9,14 +9,38 @@ export type PianoKey = {
 
 const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'] as const;
 
-/** MIDI note number → Hz (A4 / MIDI 69 = 440 Hz). */
+/** MIDI note number → Hz (A4 / MIDI 69 = 440 Hz). Inverse of frequencyToMidiFloat. */
 export function pianoFrequencyHz(midiNote: number, a4 = 440): number {
   return 2 ** ((midiNote - 69) / 12) * a4;
 }
 
-/** Hz → nearest MIDI note number. */
+/**
+ * Frequency → MIDI note number (continuous).
+ * Standard formula: n = 69 + 12 × log₂(f / 440)
+ * (A4 = 440 Hz = MIDI 69)
+ */
+export function frequencyToMidiFloat(frequencyHz: number, a4 = 440): number {
+  return 69 + 12 * Math.log2(frequencyHz / a4);
+}
+
+/** Hz → nearest integer MIDI note (rounds the formula above). */
 export function frequencyToMidi(frequencyHz: number, a4 = 440): number {
-  return Math.round(12 * Math.log2(frequencyHz / a4) + 69);
+  return Math.round(frequencyToMidiFloat(frequencyHz, a4));
+}
+
+/** 0 = bottom (minMidi), 1 = top (maxMidi) on a linear-in-MIDI chart axis. */
+export function midiToChartAxisRatio(midi: number, minMidi: number, maxMidi: number): number {
+  const clamped = Math.max(minMidi, Math.min(maxMidi, midi));
+  return (clamped - minMidi) / (maxMidi - minMidi);
+}
+
+export function frequencyToChartAxisRatio(
+  frequencyHz: number,
+  minMidi: number,
+  maxMidi: number,
+  a4 = 440,
+): number {
+  return midiToChartAxisRatio(frequencyToMidiFloat(frequencyHz, a4), minMidi, maxMidi);
 }
 
 export function midiToNoteName(midi: number): string {
@@ -56,9 +80,14 @@ export function frequencyToAxisRatio(frequencyHz: number, minHz: number, maxHz: 
 /** A3 = MIDI 57 = 220 Hz */
 export const PITCH_CHART_CENTER_MIDI = 57;
 
-/** C3–C6 covers typical Bhupali practice without wild outlier expansion. */
-export const PITCH_CHART_MIN_MIDI = 48;
+/** Full practice chart span: C2 (65 Hz) through C6 (1047 Hz). */
+export const PITCH_CHART_MIN_MIDI = 36;
 export const PITCH_CHART_MAX_MIDI = 84;
+
+/** Chromatic keys for the fixed pitch chart Y axis. */
+export function buildPitchChartPianoKeys(a4 = 440): PianoKey[] {
+  return buildPianoRangeBetweenMidi(PITCH_CHART_MIN_MIDI, PITCH_CHART_MAX_MIDI, a4);
+}
 
 /** Expand piano range to fit sample pitches with padding; never shrinks below default span. */
 export function buildPianoRangeForSamples(
