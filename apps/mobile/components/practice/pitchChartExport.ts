@@ -2,7 +2,6 @@ import {
   buildPitchChartPianoKeys,
   buildPitchCsvFilename,
   frequencyToChartAxisRatio,
-  isVocalFrequency,
   midiToChartAxisRatio,
   PITCH_CHART_CENTER_MIDI,
   PITCH_CHART_MAX_MIDI,
@@ -10,14 +9,19 @@ import {
   serializePitchSamplesCsv,
 } from '@music-app/utils';
 import type { GraphPitchSample } from './PitchGraph';
-import { TIME_SLOT_MS } from './PitchGraph';
+import {
+  buildChartLayout,
+  buildGridLabels,
+  resolveTimelineMs,
+} from './pitchChartLayout';
+import { splitPitchRuns, strokeSmoothPitchCurve } from './pitchGraphPath';
 
-const SLOT_WIDTH = 52;
 const AXIS_LEFT = 56;
 const AXIS_BOTTOM = 34;
 const CHART_PADDING_Y = 14;
 const MIN_PX_PER_NOTE = 10;
 const MIN_CHART_PLOT_HEIGHT = 520;
+const PNG_CHART_VIEWPORT_WIDTH = 800;
 
 function shouldShowYLabel(index: number, total: number): boolean {
   if (total <= 13) return true;
@@ -56,6 +60,7 @@ export function exportPitchChartPng(
   samples: GraphPitchSample[],
   sessionDurationMs: number,
   filename = 'pitch-chart.png',
+  xAxisSeconds = false,
 ): void {
   if (typeof document === 'undefined') return;
 
@@ -64,12 +69,24 @@ export function exportPitchChartPng(
   const usableHeight = chartHeight - CHART_PADDING_Y * 2;
   const totalHeight = chartHeight + AXIS_BOTTOM;
 
-  const timelineMs = Math.max(TIME_SLOT_MS * 4, sessionDurationMs + TIME_SLOT_MS);
-  const timeSlots = Math.ceil(timelineMs / TIME_SLOT_MS) + 1;
-  const contentWidth = timeSlots * SLOT_WIDTH + 16;
-  const totalWidth = AXIS_LEFT + contentWidth;
+  const timelineMs = resolveTimelineMs({
+    xAxisSeconds,
+    mode: 'review',
+    currentTimeMs: 0,
+    sessionDurationMs,
+  });
 
-  const msToX = (ms: number) => (ms / TIME_SLOT_MS) * SLOT_WIDTH;
+  const layout = buildChartLayout({
+    xAxisSeconds,
+    timelineMs,
+    chartViewportWidth: PNG_CHART_VIEWPORT_WIDTH,
+  });
+
+  const contentWidth = layout.contentWidth;
+  const totalWidth = AXIS_LEFT + contentWidth;
+  const timeLabels = buildGridLabels(timelineMs, layout);
+
+  const msToX = (ms: number) => layout.msToX(ms);
   const midiToY = (midi: number) => {
     const ratio = midiToChartAxisRatio(midi, PITCH_CHART_MIN_MIDI, PITCH_CHART_MAX_MIDI);
     return CHART_PADDING_Y + (1 - ratio) * usableHeight;
@@ -134,9 +151,10 @@ export function exportPitchChartPng(
   ctx.fillStyle = '#D1C4E9';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'alphabetic';
-  for (let ms = 0; ms <= timelineMs; ms += TIME_SLOT_MS) {
-    const x = AXIS_LEFT + msToX(ms);
-    ctx.fillText(`${ms}ms`, x + SLOT_WIDTH / 2, chartHeight + 22);
+
+  for (const t of timeLabels) {
+    const x = AXIS_LEFT + t.gridLeft;
+    ctx.fillText(t.label, x, chartHeight + 22);
     ctx.strokeStyle = '#2E2A3F';
     ctx.lineWidth = 1;
     ctx.beginPath();
@@ -145,27 +163,29 @@ export function exportPitchChartPng(
     ctx.stroke();
   }
 
-  const valid = samples.filter(
-    (s) => s.frequencyHz != null && s.frequencyHz > 0 && isVocalFrequency(s.frequencyHz),
-  );
+  const pitchRuns = splitPitchRuns(samples, timelineMs);
   ctx.strokeStyle = 'rgba(255,255,255,0.85)';
   ctx.lineWidth = 2;
-  ctx.beginPath();
-  valid.forEach((s, i) => {
-    const x = AXIS_LEFT + msToX(s.elapsedMs);
-    const y = freqToY(s.frequencyHz!);
-    if (i === 0) ctx.moveTo(x, y);
-    else ctx.lineTo(x, y);
-  });
-  if (valid.length > 0) ctx.stroke();
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+
+  for (const run of pitchRuns) {
+    const points = run.map((s) => ({
+      x: AXIS_LEFT + msToX(s.elapsedMs),
+      y: freqToY(s.frequencyHz!),
+    }));
+    strokeSmoothPitchCurve(ctx, points);
+  }
 
   ctx.fillStyle = '#FFFFFF';
-  for (const s of valid) {
-    const x = AXIS_LEFT + msToX(s.elapsedMs);
-    const y = freqToY(s.frequencyHz!);
-    ctx.beginPath();
-    ctx.arc(x, y, 4, 0, Math.PI * 2);
-    ctx.fill();
+  for (const run of pitchRuns) {
+    for (const s of run) {
+      const x = AXIS_LEFT + msToX(s.elapsedMs);
+      const y = freqToY(s.frequencyHz!);
+      ctx.beginPath();
+      ctx.arc(x, y, 4, 0, Math.PI * 2);
+      ctx.fill();
+    }
   }
 
   const link = document.createElement('a');

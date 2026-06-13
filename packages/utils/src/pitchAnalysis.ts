@@ -371,11 +371,8 @@ export function buildPitchSample(
   timestamp = Date.now(),
   a4 = 440,
 ): PitchSample {
-  if (frequencyHz == null) {
+  if (frequencyHz == null || clarity < 0.58) {
     return { timestamp, frequencyHz: null, clarity, note: null, cents: null };
-  }
-  if (clarity < 0.58) {
-    return { timestamp, frequencyHz, clarity, note: null, cents: null };
   }
   const { note, cents } = frequencyToNote(frequencyHz, a4);
   return { timestamp, frequencyHz, clarity, note, cents };

@@ -1,16 +1,21 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { View, StyleSheet, Text, ScrollView } from 'react-native';
+import React, { createElement, useEffect, useMemo, useRef, useState } from 'react';
+import { View, StyleSheet, Text, ScrollView, Platform } from 'react-native';
 import {
   buildPitchChartPianoKeys,
   frequencyToChartAxisRatio,
-  isVocalFrequency,
   midiToChartAxisRatio,
   PITCH_CHART_CENTER_MIDI,
   PITCH_CHART_MAX_MIDI,
   PITCH_CHART_MIN_MIDI,
-  PITCH_SAMPLE_INTERVAL_MS,
   type PianoKey,
 } from '@music-app/utils';
+import { buildSmoothPitchPath, splitPitchRuns } from './pitchGraphPath';
+import {
+  buildChartLayout,
+  buildGridLabels,
+  resolveTimelineMs,
+  TIME_SLOT_MS,
+} from './pitchChartLayout';
 
 export type MelodyNote = {
   note: string;
@@ -37,6 +42,8 @@ type PitchGraphProps = {
   mode: PitchGraphMode;
   resetKey?: number;
   height?: number;
+  /** When true: 1s grid labels and 12s viewport scale. */
+  xAxisSeconds?: boolean;
 };
 
 /** Bhupali scale (C4 tonic). */
@@ -49,19 +56,62 @@ export const NOTE_FREQS: Record<string, number> = {
   Ṡ: 523.25,
 };
 
-export const TIME_SLOT_MS = PITCH_SAMPLE_INTERVAL_MS;
-const SLOT_WIDTH = 52;
+export { TIME_SLOT_MS } from './pitchChartLayout';
 const AXIS_LEFT = 52;
 const AXIS_BOTTOM = 34;
 const CHART_PADDING_Y = 14;
 const PLAYHEAD_VIEWPORT_RATIO = 0.35;
-const IDLE_TIMELINE_MS = 3000;
 const Y_LABEL_HALF_HEIGHT = 9;
 
 function shouldShowYLabel(index: number, total: number): boolean {
   if (total <= 13) return true;
   if (total <= 20) return index % 2 === 0;
   return index % 3 === 0;
+}
+
+function PitchCurves({
+  paths,
+  width,
+  height,
+}: {
+  paths: string[];
+  width: number;
+  height: number;
+}) {
+  if (Platform.OS !== 'web' || paths.length === 0) return null;
+
+  return (
+    <View
+      pointerEvents="none"
+      style={{
+        position: 'absolute',
+        left: 0,
+        top: 0,
+        width,
+        height,
+        zIndex: 8,
+      }}
+    >
+      {createElement(
+        'svg',
+        {
+          width,
+          height,
+        },
+        paths.map((pathD, index) =>
+          createElement('path', {
+            key: `curve-${index}`,
+            d: pathD,
+            fill: 'none',
+            stroke: 'rgba(255,255,255,0.85)',
+            strokeWidth: 2,
+            strokeLinecap: 'round',
+            strokeLinejoin: 'round',
+          }),
+        ),
+      )}
+    </View>
+  );
 }
 
 export default function PitchGraph({
@@ -72,6 +122,7 @@ export default function PitchGraph({
   mode,
   resetKey = 0,
   height = 400,
+  xAxisSeconds = true,
 }: PitchGraphProps) {
   const [viewportWidth, setViewportWidth] = useState(320);
   const scrollRef = useRef<ScrollView>(null);
@@ -95,71 +146,93 @@ export default function PitchGraph({
     return CHART_PADDING_Y + (1 - ratio) * usableHeight;
   };
 
-  const timelineMs = useMemo(() => {
-    if (mode === 'idle') return IDLE_TIMELINE_MS;
-    if (mode === 'live') {
-      return Math.max(TIME_SLOT_MS * 4, currentTimeMs + TIME_SLOT_MS * 2);
-    }
-    return Math.max(TIME_SLOT_MS * 4, sessionDurationMs + TIME_SLOT_MS);
-  }, [mode, currentTimeMs, sessionDurationMs]);
+  const timelineMs = useMemo(
+    () =>
+      resolveTimelineMs({
+        xAxisSeconds,
+        mode,
+        currentTimeMs,
+        sessionDurationMs,
+      }),
+    [mode, currentTimeMs, sessionDurationMs, xAxisSeconds],
+  );
 
-  const timeSlots = Math.ceil(timelineMs / TIME_SLOT_MS) + 1;
   const chartViewportWidth = Math.max(120, viewportWidth - AXIS_LEFT);
-  const naturalWidth = timeSlots * SLOT_WIDTH;
-  const contentWidth = Math.max(naturalWidth, chartViewportWidth);
-  const slotWidth = contentWidth / timeSlots;
 
-  const msToX = (ms: number) => (ms / TIME_SLOT_MS) * slotWidth;
+  const layout = useMemo(
+    () =>
+      buildChartLayout({
+        xAxisSeconds,
+        timelineMs,
+        chartViewportWidth,
+      }),
+    [xAxisSeconds, timelineMs, chartViewportWidth],
+  );
 
-  const userPoints = useMemo(() => {
-    return samples
-      .filter(
-        (s) =>
-          s.frequencyHz != null &&
-          s.frequencyHz > 0 &&
-          isVocalFrequency(s.frequencyHz) &&
-          s.elapsedMs <= timelineMs,
-      )
-      .map((sample, idx) => ({
-        key: `pt-${sample.timestamp}-${idx}`,
-        left: msToX(sample.elapsedMs),
-        top: freqToY(sample.frequencyHz!),
-      }));
-  }, [samples, timelineMs, usableHeight, slotWidth]);
+  const { contentWidth, msToX } = layout;
+
+  const pitchRuns = useMemo(
+    () => splitPitchRuns(samples, timelineMs),
+    [samples, timelineMs],
+  );
+
+  const userPoints = useMemo(
+    () =>
+      pitchRuns.flatMap((run, runIdx) =>
+        run.map((sample, idx) => ({
+          key: `pt-${runIdx}-${sample.timestamp}-${idx}`,
+          left: msToX(sample.elapsedMs),
+          top: freqToY(sample.frequencyHz!),
+        })),
+      ),
+    [pitchRuns, msToX, usableHeight],
+  );
+
+  const smoothPaths = useMemo(
+    () =>
+      pitchRuns
+        .map((run) =>
+          buildSmoothPitchPath(
+            run.map((s) => ({
+              x: msToX(s.elapsedMs),
+              y: freqToY(s.frequencyHz!),
+            })),
+          ),
+        )
+        .filter((path) => path.length > 0),
+    [pitchRuns, msToX, usableHeight],
+  );
 
   const lineSegments = useMemo(() => {
-    const valid = samples.filter(
-      (s) =>
-        s.frequencyHz != null &&
-        s.frequencyHz > 0 &&
-        isVocalFrequency(s.frequencyHz) &&
-        s.elapsedMs <= timelineMs,
-    );
+    if (Platform.OS === 'web') return [];
+
     const segments: { key: string; left: number; top: number; width: number; angle: number }[] = [];
 
-    for (let i = 1; i < valid.length; i++) {
-      const prev = valid[i - 1];
-      const curr = valid[i];
-      const x1 = msToX(prev.elapsedMs);
-      const y1 = freqToY(prev.frequencyHz!);
-      const x2 = msToX(curr.elapsedMs);
-      const y2 = freqToY(curr.frequencyHz!);
-      const dx = x2 - x1;
-      const dy = y2 - y1;
-      const width = Math.sqrt(dx * dx + dy * dy);
-      if (width < 1) continue;
-      const angle = (Math.atan2(dy, dx) * 180) / Math.PI;
-      segments.push({
-        key: `seg-${prev.timestamp}-${curr.timestamp}`,
-        left: (x1 + x2) / 2 - width / 2,
-        top: (y1 + y2) / 2,
-        width,
-        angle,
-      });
+    for (const run of pitchRuns) {
+      for (let i = 1; i < run.length; i++) {
+        const prev = run[i - 1];
+        const curr = run[i];
+        const x1 = msToX(prev.elapsedMs);
+        const y1 = freqToY(prev.frequencyHz!);
+        const x2 = msToX(curr.elapsedMs);
+        const y2 = freqToY(curr.frequencyHz!);
+        const dx = x2 - x1;
+        const dy = y2 - y1;
+        const width = Math.sqrt(dx * dx + dy * dy);
+        if (width < 1) continue;
+        const angle = (Math.atan2(dy, dx) * 180) / Math.PI;
+        segments.push({
+          key: `seg-${prev.timestamp}-${curr.timestamp}`,
+          left: (x1 + x2) / 2 - width / 2,
+          top: (y1 + y2) / 2,
+          width,
+          angle,
+        });
+      }
     }
 
     return segments;
-  }, [samples, timelineMs, usableHeight, slotWidth]);
+  }, [pitchRuns, msToX, usableHeight]);
 
   const playheadX = msToX(currentTimeMs);
   const isLive = mode === 'live';
@@ -167,7 +240,7 @@ export default function PitchGraph({
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ x: 0, animated: false });
-  }, [resetKey]);
+  }, [resetKey, xAxisSeconds]);
 
   useEffect(() => {
     if (!isLive || viewportWidth <= 0) return;
@@ -175,17 +248,10 @@ export default function PitchGraph({
     scrollRef.current?.scrollTo({ x: targetScrollX, animated: false });
   }, [isLive, playheadX, chartViewportWidth, viewportWidth]);
 
-  const timeLabels = useMemo(() => {
-    const labels: { key: string; left: number; label: string }[] = [];
-    for (let ms = 0; ms <= timelineMs; ms += TIME_SLOT_MS) {
-      labels.push({
-        key: `t-${ms}`,
-        left: msToX(ms),
-        label: `${ms}`,
-      });
-    }
-    return labels;
-  }, [timelineMs, slotWidth]);
+  const timeLabels = useMemo(
+    () => buildGridLabels(timelineMs, layout),
+    [timelineMs, layout],
+  );
 
   const reversedKeys = [...pianoKeys].reverse();
 
@@ -251,8 +317,10 @@ export default function PitchGraph({
               })}
 
               {timeLabels.map((t) => (
-                <View key={`vgrid-${t.key}`} style={[styles.vertGrid, { left: t.left }]} />
+                <View key={`vgrid-${t.key}`} style={[styles.vertGrid, { left: t.gridLeft }]} />
               ))}
+
+              <PitchCurves paths={smoothPaths} width={contentWidth} height={chartHeight} />
 
               {lineSegments.map((seg) => (
                 <View
@@ -285,8 +353,8 @@ export default function PitchGraph({
 
             <View style={[styles.xAxis, { width: contentWidth }]}>
               {timeLabels.map((t) => (
-                <Text key={t.key} style={[styles.xLabel, { left: t.left, width: slotWidth }]}>
-                  {t.label}ms
+                <Text key={t.key} style={[styles.xLabel, { left: t.left, width: t.width }]}>
+                  {t.label}
                 </Text>
               ))}
             </View>

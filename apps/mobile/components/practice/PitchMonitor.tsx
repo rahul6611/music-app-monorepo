@@ -1,5 +1,5 @@
 import React, { useCallback, useState, useEffect, useRef, useMemo } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Platform, useWindowDimensions } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Platform, Switch, useWindowDimensions } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useTheme } from '@music-app/store';
@@ -92,6 +92,7 @@ export default function PitchMonitor() {
     durationMs: number;
   } | null>(null);
   const [chartResetKey, setChartResetKey] = useState(0);
+  const [xAxisSeconds, setXAxisSeconds] = useState(true);
 
   const { isListening, error, currentSample, history, sampleRate, getSavedSamples, openAppSettings } =
     usePitchAnalyzer({ enabled: listening, historySize: 600 });
@@ -110,80 +111,10 @@ export default function PitchMonitor() {
   const stableReadoutRef = useRef<StablePitchReadout | null>(null);
   const lastTargetNoteRef = useRef<string | null>(null);
 
-  // Web Audio Context for playing reference notes
-  const activeOscillatorsRef = useRef<any[]>([]);
-  const [isPlayingReference, setIsPlayingReference] = useState(false);
-
   const activeMelodyRef = useRef(activeMelody);
   useEffect(() => {
     activeMelodyRef.current = activeMelody;
   }, [activeMelody]);
-
-  // Helper to play reference notes synthetically on Web
-  const stopReferenceAudio = useCallback(() => {
-    activeOscillatorsRef.current.forEach((osc) => {
-      try {
-        osc.stop();
-      } catch {}
-    });
-    activeOscillatorsRef.current = [];
-    setIsPlayingReference(false);
-  }, []);
-
-  const playReferenceAudio = useCallback(() => {
-    if (isPlayingReference) {
-      stopReferenceAudio();
-      return;
-    }
-
-    if (Platform.OS !== 'web') {
-      setStatus('Melody play only works on web.');
-      return;
-    }
-
-    try {
-      const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
-      if (!AudioContextClass) return;
-
-      const ctx = new AudioContextClass();
-      setIsPlayingReference(true);
-      const now = ctx.currentTime;
-      const oscs: any[] = [];
-
-      activeMelody.notes.forEach((note) => {
-        const freq = NOTE_FREQS[note.note];
-        if (!freq) return;
-
-        const osc = ctx.createOscillator();
-        const gainNode = ctx.createGain();
-
-        osc.type = 'sine';
-        osc.frequency.value = freq;
-
-        // Smooth volume curves to prevent clicks
-        gainNode.gain.setValueAtTime(0, now + note.start / 1000);
-        gainNode.gain.linearRampToValueAtTime(0.25, now + note.start / 1000 + 0.05);
-        gainNode.gain.setValueAtTime(0.25, now + note.end / 1000 - 0.05);
-        gainNode.gain.linearRampToValueAtTime(0, now + note.end / 1000);
-
-        osc.connect(gainNode);
-        gainNode.connect(ctx.destination);
-
-        osc.start(now + note.start / 1000);
-        osc.stop(now + note.end / 1000);
-
-        oscs.push(osc);
-      });
-
-      activeOscillatorsRef.current = oscs;
-
-      setTimeout(() => {
-        setIsPlayingReference(false);
-      }, activeMelody.duration);
-    } catch (err) {
-      console.error('Failed playing audio tones', err);
-    }
-  }, [activeMelody, isPlayingReference, stopReferenceAudio]);
 
   const handleStopAndSave = useCallback(async (finalDuration: number) => {
     const samples = getSavedSamples();
@@ -243,14 +174,13 @@ export default function PitchMonitor() {
 
   const handleStart = useCallback(() => {
     setStatus(null);
-    stopReferenceAudio();
     setReviewSession(null);
     setSessionAnchorMs(null);
     setCurrentTimeMs(0);
     setChartResetKey((k) => k + 1);
     setSessionStartTime(Date.now());
     setListening(true);
-  }, [stopReferenceAudio]);
+  }, []);
 
   const handleToggle = useCallback(async () => {
     if (listening) {
@@ -316,9 +246,14 @@ export default function PitchMonitor() {
       return;
     }
     const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
-    exportPitchChartPng(reviewSession.samples, reviewSession.durationMs, `pitch-chart-${stamp}.png`);
+    exportPitchChartPng(
+      reviewSession.samples,
+      reviewSession.durationMs,
+      `pitch-chart-${stamp}.png`,
+      xAxisSeconds,
+    );
     setStatus('Chart downloaded.');
-  }, [reviewSession]);
+  }, [reviewSession, xAxisSeconds]);
 
   const handleDownloadCsv = useCallback(() => {
     if (!reviewSession || Platform.OS !== 'web') {
@@ -475,13 +410,6 @@ export default function PitchMonitor() {
     }
   }, [listening, isListening, sessionAnchorMs]);
 
-  // Clean up references on unmount
-  useEffect(() => {
-    return () => {
-      stopReferenceAudio();
-    };
-  }, [stopReferenceAudio]);
-
   return (
     <ScrollView style={styles.outerContainer} contentContainerStyle={styles.content}>
       <View style={styles.header}>
@@ -501,25 +429,6 @@ export default function PitchMonitor() {
             <Text style={styles.sectionLabel}>1. Start Practicing:</Text>
             
             <View style={styles.actionsRow}>
-              {Platform.OS === 'web' ? (
-                <TouchableOpacity
-                  style={[
-                    styles.btnSecondary,
-                    isPlayingReference && { backgroundColor: '#3B3654', borderColor: '#A78BFA' },
-                  ]}
-                  onPress={playReferenceAudio}
-                >
-                  <MaterialIcons
-                    name={isPlayingReference ? 'volume-up' : 'volume-mute'}
-                    size={20}
-                    color={isPlayingReference ? '#C084FC' : '#D1C4E9'}
-                  />
-                  <Text style={[styles.btnSecText, isPlayingReference && { color: '#C084FC' }]}>
-                    {isPlayingReference ? 'Stop Melody' : 'Play Melody'}
-                  </Text>
-                </TouchableOpacity>
-              ) : null}
-
               <TouchableOpacity
                 style={[
                   styles.btnPrimary,
@@ -594,6 +503,15 @@ export default function PitchMonitor() {
             <View style={styles.cardHeader}>
               <Text style={styles.sectionLabel}>2. Pitch Chart:</Text>
               <View style={styles.chartHeaderRight}>
+                <View style={styles.axisToggle}>
+                  <Text style={styles.axisToggleLabel}>X axis seconds</Text>
+                  <Switch
+                    value={xAxisSeconds}
+                    onValueChange={setXAxisSeconds}
+                    trackColor={{ false: '#2E2A3F', true: '#7C3AED' }}
+                    thumbColor="#FFFFFF"
+                  />
+                </View>
                 {currentAccuracy !== null ? (
                   <View style={styles.accuracyBadge}>
                     <Text style={styles.accuracyText}>{currentAccuracy}% Avg</Text>
@@ -634,6 +552,7 @@ export default function PitchMonitor() {
                 mode={chartMode}
                 resetKey={chartResetKey}
                 height={560}
+                xAxisSeconds={xAxisSeconds}
               />
             </View>
           </View>
@@ -925,7 +844,7 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   btnPrimary: {
-    flex: 2,
+    flex: 1,
     flexDirection: 'row',
     backgroundColor: '#7C3AED', // purple-600
     paddingVertical: 14,
@@ -938,26 +857,25 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 6,
   },
-  btnSecondary: {
-    flex: 1,
-    flexDirection: 'row',
-    backgroundColor: '#1E1B29',
-    borderColor: '#2E2A3F',
-    borderWidth: 1,
-    paddingVertical: 14,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-  },
   btnText: {
     color: '#FFF',
     fontSize: 15,
     fontWeight: '700',
   },
-  btnSecText: {
+  axisToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#2E2A3F',
+    backgroundColor: '#13111C',
+  },
+  axisToggleLabel: {
     color: '#D1C4E9',
-    fontSize: 14,
+    fontSize: 11,
     fontWeight: '600',
   },
   historySection: {

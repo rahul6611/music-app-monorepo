@@ -82,9 +82,9 @@ describe('pitchAnalysis', () => {
     expect(frequencyToNote(result.frequencyHz!).note).toBe('A5');
   });
 
-  it('keeps raw frequency when clarity is low but drops note mapping', () => {
+  it('drops frequency during silence (low clarity)', () => {
     const sample = buildPitchSample(440, 0.5);
-    expect(sample.frequencyHz).toBe(440);
+    expect(sample.frequencyHz).toBeNull();
     expect(sample.note).toBeNull();
   });
 
