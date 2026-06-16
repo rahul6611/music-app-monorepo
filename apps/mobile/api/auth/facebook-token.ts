@@ -1,51 +1,5 @@
 import { VercelRequest, VercelResponse } from '@vercel/node';
-import * as firebaseAdmin from 'firebase-admin';
-
-const admin = firebaseAdmin as any;
-
-async function retrieveAndClearToken(tempCode: string) {
-  if (process.env.FIREBASE_SERVICE_ACCOUNT) {
-    try {
-      if (!admin.apps.length) {
-        admin.initializeApp({
-          credential: admin.credential.cert(JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT)),
-          databaseURL: `https://${process.env.EXPO_PUBLIC_FIREBASE_PROJECT_ID}.firebaseio.com`
-        });
-      }
-      const docRef = admin.firestore().collection('oauth_exchanges').doc(tempCode);
-      const doc = await docRef.get();
-      if (doc.exists) {
-        const data = doc.data();
-        await docRef.delete(); // clear immediately for security!
-        return data;
-      }
-      return null;
-    } catch (err) {
-      console.warn('Firebase Admin SDK error, falling back to REST:', err);
-    }
-  }
-
-  // Fallback REST
-  const projectId = process.env.EXPO_PUBLIC_FIREBASE_PROJECT_ID || 'testfirebasepbapp';
-  const url = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/oauth_exchanges/${tempCode}`;
-  
-  try {
-    const res = await fetch(url);
-    if (res.ok) {
-      const data = await res.json();
-      // Delete document
-      await fetch(url, { method: 'DELETE' });
-      return {
-        token: data.fields?.token?.stringValue || '',
-        type: data.fields?.type?.stringValue || '',
-        refreshToken: data.fields?.refreshToken?.stringValue || '',
-      };
-    }
-  } catch (err) {
-    console.error('REST API token retrieval error:', err);
-  }
-  return null;
-}
+import { readOAuthTempCode } from './oauthTempCode';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -63,10 +17,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(400).json({ error: 'Missing temporary code' });
   }
 
-  const exchangeData = await retrieveAndClearToken(tempCode);
-  if (!exchangeData) {
-    return res.status(404).json({ error: 'OAuth exchange code not found or expired' });
+  const clientSecret = process.env.FACEBOOK_APP_SECRET;
+  if (!clientSecret) {
+    return res.status(500).json({
+      error: 'Server misconfigured: set FACEBOOK_APP_SECRET in Vercel environment variables.',
+    });
   }
 
-  return res.status(200).json(exchangeData);
+  const exchangeData = readOAuthTempCode(tempCode, clientSecret);
+  if (!exchangeData?.token) {
+    return res.status(404).json({
+      error: 'OAuth exchange code not found or expired. Please try connecting Facebook again.',
+    });
+  }
+
+  return res.status(200).json({
+    token: exchangeData.token,
+    type: exchangeData.type || 'facebook',
+    refreshToken: exchangeData.refreshToken || '',
+  });
 }

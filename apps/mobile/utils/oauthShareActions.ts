@@ -17,6 +17,18 @@ const FB_TOKEN_KEY = 'fb_user_access_token';
 const YT_TOKEN_KEY = 'youtube_access_token';
 const YT_REFRESH_TOKEN_KEY = 'youtube_refresh_token';
 
+function parseOAuthReturnCode(resultUrl: string): string {
+  const parsed = Linking.parse(resultUrl);
+  const rawCode = parsed.queryParams?.code;
+  if (typeof rawCode === 'string') {
+    return decodeURIComponent(rawCode);
+  }
+  if (Array.isArray(rawCode) && rawCode[0]) {
+    return decodeURIComponent(rawCode[0]);
+  }
+  return '';
+}
+
 export async function getFacebookToken(): Promise<string | null> {
   return AsyncStorage.getItem(FB_TOKEN_KEY);
 }
@@ -55,7 +67,10 @@ export async function clearYouTubeTokens(): Promise<void> {
 export async function exchangeTempCode(code: string, type: 'facebook' | 'youtube'): Promise<any> {
   const baseUrl = getWebAppBaseUrl();
   const endpoint = type === 'facebook' ? '/api/facebook-token' : '/api/google-token';
-  const response = await fetch(`${baseUrl}${endpoint}?code=${code}`);
+  const normalizedCode = decodeURIComponent(code);
+  const response = await fetch(
+    `${baseUrl}${endpoint}?code=${encodeURIComponent(normalizedCode)}`,
+  );
   if (!response.ok) {
     throw new Error(`Failed to exchange oauth code: ${await response.text()}`);
   }
@@ -115,8 +130,7 @@ export async function loginWithFacebook(): Promise<string> {
   const result = await WebBrowser.openAuthSessionAsync(authUrl, redirectUrl);
 
   if (result.type === 'success' && result.url) {
-    const parsed = Linking.parse(result.url);
-    const code = parsed.queryParams?.code as string;
+    const code = parseOAuthReturnCode(result.url);
     if (code) {
       const data = await exchangeTempCode(code, 'facebook');
       if (data.token) {
@@ -226,8 +240,7 @@ export async function loginWithYouTube(): Promise<string> {
   const result = await WebBrowser.openAuthSessionAsync(authUrl, redirectUrl);
 
   if (result.type === 'success' && result.url) {
-    const parsed = Linking.parse(result.url);
-    const code = parsed.queryParams?.code as string;
+    const code = parseOAuthReturnCode(result.url);
     if (code) {
       const data = await exchangeTempCode(code, 'youtube');
       if (data.token) {

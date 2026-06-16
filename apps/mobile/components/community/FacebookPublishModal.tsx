@@ -69,9 +69,12 @@ export default function FacebookPublishModal({
       const message = error?.message || 'Could not fetch your Facebook Pages.';
       const hint = message.includes('EXPO_PUBLIC_FACEBOOK_APP_ID')
         ? message
-        : `${message}\n\nChecklist:\n• Add EXPO_PUBLIC_FACEBOOK_APP_ID to apps/mobile/.env\n• Add FACEBOOK_APP_SECRET to Vercel (not mobile)\n• Add Facebook Login use case in Meta Developer\n• Add redirect URI: https://musiki.vercel.app/api/facebook-callback\n• Add yourself as App Admin/Tester in Meta`;
-      Alert.alert('Facebook Authentication Failed', hint);
-      onClose();
+        : `${message}\n\nChecklist:\n• FACEBOOK_APP_SECRET set on Vercel\n• Redeploy after env changes\n• EXPO_PUBLIC_FACEBOOK_CONFIG_ID in apps/mobile/.env`;
+      if (Platform.OS === 'web') {
+        window.alert(`Facebook Authentication Failed\n\n${hint}`);
+      } else {
+        Alert.alert('Facebook Authentication Failed', hint);
+      }
     } finally {
       setLoading(false);
     }
