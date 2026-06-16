@@ -10,7 +10,7 @@ async function saveOAuthExchange(tempCode: string, tokenData: any) {
       if (!admin.apps.length) {
         admin.initializeApp({
           credential: admin.credential.cert(JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT)),
-          databaseURL: `https://${process.env.EXPO_PUBLIC_FIREBASE_PROJECT_ID}.firebaseio.com`
+          databaseURL: `https://${process.env.EXPO_PUBLIC_FIREBASE_PROJECT_ID}.firebaseio.com`,
         });
       }
       await admin.firestore().collection('oauth_exchanges').doc(tempCode).set({
@@ -23,10 +23,9 @@ async function saveOAuthExchange(tempCode: string, tokenData: any) {
     }
   }
 
-  // Fallback REST
   const projectId = process.env.EXPO_PUBLIC_FIREBASE_PROJECT_ID || 'testfirebasepbapp';
   const url = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/oauth_exchanges/${tempCode}`;
-  
+
   const fields: any = {};
   for (const key of Object.keys(tokenData)) {
     fields[key] = { stringValue: tokenData[key] };
@@ -36,11 +35,11 @@ async function saveOAuthExchange(tempCode: string, tokenData: any) {
   await fetch(url, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ fields })
+    body: JSON.stringify({ fields }),
   });
 }
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
+export async function handleGoogleCallback(req: VercelRequest, res: VercelResponse) {
   const { code, state, error } = req.query;
 
   if (error) {
@@ -48,7 +47,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   const authCode = Array.isArray(code) ? code[0] : code;
-  const redirectScheme = Array.isArray(state) ? state[0] : state; // e.g. "exp://localhost:8081" or "musiki://"
+  const redirectScheme = Array.isArray(state) ? state[0] : state;
 
   if (!authCode) {
     return res.status(400).send('Missing authorization code');
@@ -86,7 +85,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     await saveOAuthExchange(tempCode, {
       token: accessToken,
-      refreshToken: refreshToken,
+      refreshToken,
       type: 'youtube',
     });
 

@@ -1,7 +1,7 @@
 import { VercelRequest, VercelResponse } from '@vercel/node';
 import { createOAuthTempCode } from './oauthTempCode';
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
+export async function handleFacebookCallback(req: VercelRequest, res: VercelResponse) {
   const { code, state, error } = req.query;
 
   if (error) {

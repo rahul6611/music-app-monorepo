@@ -14,27 +14,27 @@
     },
     {
       "source": "/api/facebook-callback",
-      "destination": "/api/auth/facebook-callback"
+      "destination": "/api/oauth?action=facebook-callback"
     },
     {
       "source": "/api/facebook-token",
-      "destination": "/api/auth/facebook-token"
+      "destination": "/api/oauth?action=facebook-token"
     },
     {
       "source": "/api/facebook-permissions",
-      "destination": "/api/auth/facebook-permissions"
+      "destination": "/api/oauth?action=facebook-permissions"
     },
     {
       "source": "/api/google-callback",
-      "destination": "/api/auth/google-callback"
+      "destination": "/api/oauth?action=google-callback"
     },
     {
       "source": "/api/google-token",
-      "destination": "/api/auth/google-token"
+      "destination": "/api/oauth?action=google-token"
     },
     {
       "source": "/api/google-refresh",
-      "destination": "/api/auth/google-refresh"
+      "destination": "/api/oauth?action=google-refresh"
     },
     {
       "source": "/(.*)",

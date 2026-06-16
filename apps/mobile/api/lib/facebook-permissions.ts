@@ -20,12 +20,10 @@ async function debugFacebookToken(inputToken: string, appToken: string) {
     is_valid?: boolean;
     scopes?: string[];
     granular_scopes?: Array<{ scope: string; target_ids?: string[] }>;
-    type?: string;
-    user_id?: string;
   };
 }
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
+export async function handleFacebookPermissions(req: VercelRequest, res: VercelResponse) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');

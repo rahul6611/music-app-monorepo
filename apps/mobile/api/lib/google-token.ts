@@ -9,14 +9,14 @@ async function retrieveAndClearToken(tempCode: string) {
       if (!admin.apps.length) {
         admin.initializeApp({
           credential: admin.credential.cert(JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT)),
-          databaseURL: `https://${process.env.EXPO_PUBLIC_FIREBASE_PROJECT_ID}.firebaseio.com`
+          databaseURL: `https://${process.env.EXPO_PUBLIC_FIREBASE_PROJECT_ID}.firebaseio.com`,
         });
       }
       const docRef = admin.firestore().collection('oauth_exchanges').doc(tempCode);
       const doc = await docRef.get();
       if (doc.exists) {
         const data = doc.data();
-        await docRef.delete(); // clear immediately for security!
+        await docRef.delete();
         return data;
       }
       return null;
@@ -25,15 +25,13 @@ async function retrieveAndClearToken(tempCode: string) {
     }
   }
 
-  // Fallback REST
   const projectId = process.env.EXPO_PUBLIC_FIREBASE_PROJECT_ID || 'testfirebasepbapp';
   const url = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/oauth_exchanges/${tempCode}`;
-  
+
   try {
-    const res = await fetch(url);
-    if (res.ok) {
-      const data = await res.json();
-      // Delete document
+    const response = await fetch(url);
+    if (response.ok) {
+      const data = await response.json();
       await fetch(url, { method: 'DELETE' });
       return {
         token: data.fields?.token?.stringValue || '',
@@ -47,7 +45,7 @@ async function retrieveAndClearToken(tempCode: string) {
   return null;
 }
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
+export async function handleGoogleToken(req: VercelRequest, res: VercelResponse) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
