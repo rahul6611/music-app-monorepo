@@ -22,10 +22,13 @@ import {
   getSavedFacebookPagePreferences,
   saveFacebookPagePreferences,
   clearFacebookPagePreferences,
+  checkFacebookPagePermissions,
+  getFacebookPermissionSetupSteps,
   isFacebookPermissionError,
   FACEBOOK_PAGE_PERMISSIONS,
   type FacebookPageAccount,
   type FacebookPagePublishResult,
+  type FacebookPermissionStatus,
 } from '../../utils/oauthShareActions';
 import { getPostShareUrls } from '../../utils/communityShareActions';
 
@@ -53,6 +56,7 @@ export default function FacebookPublishModal({
   const [step, setStep] = useState<ModalStep>('setup');
   const [publishResults, setPublishResults] = useState<FacebookPagePublishResult[]>([]);
   const [publishProgress, setPublishProgress] = useState<Record<string, 'pending' | 'success' | 'error'>>({});
+  const [permissionStatus, setPermissionStatus] = useState<FacebookPermissionStatus | null>(null);
 
   useEffect(() => {
     if (visible && post) {
@@ -61,6 +65,7 @@ export default function FacebookPublishModal({
       setStep('setup');
       setPublishResults([]);
       setPublishProgress({});
+      setPermissionStatus(null);
       loadPages();
     } else if (!visible) {
       setPages([]);
@@ -79,6 +84,14 @@ export default function FacebookPublishModal({
       }
       const pageList = await fetchFacebookPages(token);
       setPages(pageList);
+
+      try {
+        const status = await checkFacebookPagePermissions(token);
+        setPermissionStatus(status);
+      } catch (permError) {
+        console.warn('Could not verify Facebook permissions:', permError);
+        setPermissionStatus(null);
+      }
 
       if (rememberSelection) {
         const saved = await getSavedFacebookPagePreferences();
@@ -145,6 +158,16 @@ export default function FacebookPublishModal({
       return;
     }
 
+    if (permissionStatus && !permissionStatus.ready) {
+      const steps = getFacebookPermissionSetupSteps(permissionStatus.missing);
+      if (Platform.OS === 'web') {
+        window.alert(`Facebook permissions incomplete\n\n${steps}`);
+      } else {
+        Alert.alert('Facebook permissions incomplete', steps);
+      }
+      return;
+    }
+
     if (rememberSelection) {
       await saveFacebookPagePreferences(selectedPages);
     }
@@ -186,6 +209,8 @@ export default function FacebookPublishModal({
     (r) => !r.success && r.error && isFacebookPermissionError(r.error),
   );
   const isPublishing = step === 'publishing';
+  const permissionsReady = permissionStatus?.ready !== false;
+  const missingPermissions = permissionStatus?.missing || [];
 
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={handleClose}>
@@ -297,6 +322,38 @@ export default function FacebookPublishModal({
                   <ActivityIndicator size="small" color={theme.primary} />
                   <Text style={[styles.progressText, { color: theme.text }]}>
                     Publishing to {selectedPages.length} page{selectedPages.length !== 1 ? 's' : ''}...
+                  </Text>
+                </View>
+              )}
+
+              {permissionStatus && !permissionStatus.ready && (
+                <View style={[styles.permissionBanner, { backgroundColor: theme.card, borderColor: '#EF4444' }]}>
+                  <Text style={[styles.permissionTitle, { color: theme.text }]}>
+                    Missing Facebook permissions
+                  </Text>
+                  <Text style={[styles.permissionText, { color: theme.textSecondary }]}>
+                    Your token is missing: {missingPermissions.join(', ')}
+                  </Text>
+                  <Text style={[styles.permissionText, { color: theme.textSecondary }]}>
+                    In Meta Developer: App Review → request Advanced Access, add permissions to your
+                    Login for Business configuration, then remove Musiki from facebook.com/settings
+                    (Business integrations) and reconnect.
+                  </Text>
+                  <TouchableOpacity
+                    style={[styles.reconnectButton, { borderColor: theme.primary }]}
+                    onPress={handleReconnect}
+                  >
+                    <Ionicons name="refresh" size={16} color={theme.primary} />
+                    <Text style={[styles.reconnectText, { color: theme.primary }]}>Reconnect Facebook</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+
+              {permissionStatus?.ready && (
+                <View style={[styles.permissionOkBanner, { backgroundColor: '#10B98122', borderColor: '#10B981' }]}>
+                  <Ionicons name="shield-checkmark" size={18} color="#10B981" />
+                  <Text style={[styles.permissionOkText, { color: theme.text }]}>
+                    All required permissions granted
                   </Text>
                 </View>
               )}
@@ -471,10 +528,10 @@ export default function FacebookPublishModal({
                 style={[
                   styles.publishButton,
                   { backgroundColor: theme.primary },
-                  (isPublishing || selectedPages.length === 0) && { opacity: 0.5 },
+                  (isPublishing || selectedPages.length === 0 || !permissionsReady) && { opacity: 0.5 },
                 ]}
                 onPress={handlePublish}
-                disabled={isPublishing || selectedPages.length === 0}
+                disabled={isPublishing || selectedPages.length === 0 || !permissionsReady}
               >
                 {isPublishing ? (
                   <ActivityIndicator size="small" color="#FFF" />
@@ -683,8 +740,25 @@ const styles = StyleSheet.create({
     padding: 12,
     borderRadius: 12,
     borderWidth: 1,
-    gap: 10,
-    marginBottom: 8,
+    gap: 8,
+    marginBottom: 12,
+  },
+  permissionTitle: {
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  permissionOkBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    padding: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    marginBottom: 12,
+  },
+  permissionOkText: {
+    fontSize: 13,
+    fontWeight: '600',
   },
   permissionText: {
     fontSize: 13,

@@ -21,6 +21,10 @@
       "destination": "/api/auth/facebook-token"
     },
     {
+      "source": "/api/facebook-permissions",
+      "destination": "/api/auth/facebook-permissions"
+    },
+    {
       "source": "/api/google-callback",
       "destination": "/api/auth/google-callback"
     },

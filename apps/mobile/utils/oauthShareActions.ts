@@ -174,6 +174,8 @@ export async function loginWithFacebook(options?: { force?: boolean }): Promise<
     authUrl += '&auth_type=reauthorize';
   }
 
+  authUrl += '&return_scopes=true';
+
   const result = await WebBrowser.openAuthSessionAsync(authUrl, redirectUrl);
 
   if (result.type === 'success' && result.url) {
@@ -320,6 +322,51 @@ export async function publishToFacebookPages({
 
   return results;
 }
+
+export interface FacebookPermissionStatus {
+  isValid: boolean;
+  scopes: string[];
+  granted: string[];
+  missing: string[];
+  ready: boolean;
+}
+
+export async function checkFacebookPagePermissions(token: string): Promise<FacebookPermissionStatus> {
+  const baseUrl = getWebAppBaseUrl();
+  const response = await fetch(`${baseUrl}/api/facebook-permissions`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ token }),
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`Failed to verify Facebook permissions: ${text}`);
+  }
+
+  return response.json();
+}
+
+export function getFacebookPermissionSetupSteps(missing: string[]): string {
+  const lines = [
+    'To publish to Facebook Pages, complete these Meta setup steps:',
+    '',
+    '1. Meta Developer → App Review → Permissions and Features',
+    '   Request Advanced Access for:',
+    '   • pages_show_list',
+    '   • pages_manage_posts',
+    '   • pages_read_engagement',
+    '',
+    '2. Facebook Login for Business → Configurations',
+    '   Add the same three permissions to your configuration (config_id).',
+    '',
+    '3. Remove old access: facebook.com/settings?tab=business_tools',
+    '   Remove Musiki, then tap Reconnect Facebook in this app.',
+  ];
+
+  if (missing.length > 0) {
+    lines.splice(3, 0, `Missing on your current token: ${missing.join(', ')}`, '');
+  }
 
 export function isFacebookPermissionError(message: string): boolean {
   const lower = message.toLowerCase();
