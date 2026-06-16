@@ -71,7 +71,7 @@ export default function CommunityShareSheet({
     }
   }, [post]);
 
-  const resolvedPost = activePost;
+  const resolvedPost = post ?? activePost;
   const postLabel = resolvedPost?.fileName || resolvedPost?.title || 'Community post';
 
   const runAction = async (actionId: string, action: () => Promise<void> | void) => {
@@ -213,7 +213,7 @@ export default function CommunityShareSheet({
     ];
   }, [resolvedPost, onClose]);
 
-  if (!resolvedPost) return null;
+  if (!resolvedPost && !visible) return null;
 
   return (
     <>

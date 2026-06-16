@@ -24,6 +24,11 @@ export function getWebAppBaseUrl(): string {
   return 'https://musiki.vercel.app';
 }
 
+function isMobileWebBrowser(): boolean {
+  if (typeof navigator === 'undefined') return false;
+  return /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+}
+
 export function getPostShareUrls(post: CommunityPostShareInput) {
   const webUrl = getCommunityPostWebUrl(post.id, getWebAppBaseUrl());
   const message = buildCommunityShareMessage(post, webUrl);
@@ -51,12 +56,25 @@ export async function shareViaNativeSheet(post: CommunityPostShareInput): Promis
   const { webUrl, message } = getPostShareUrls(post);
 
   if (Platform.OS === 'web') {
-    if (typeof navigator !== 'undefined' && navigator.share) {
-      await navigator.share({ title: 'Musiki', text: message, url: webUrl });
-      return;
-    }
     await Clipboard.setStringAsync(message);
-    Alert.alert('Copied', 'Share text copied to clipboard.');
+
+    // Desktop Windows/macOS Web Share API shows the OS "Share link" popup — avoid on desktop.
+    if (isMobileWebBrowser() && typeof navigator !== 'undefined' && navigator.share) {
+      try {
+        await navigator.share({ title: 'Musiki', text: message, url: webUrl });
+        return;
+      } catch {
+        // User cancelled or share failed — fall through to clipboard message.
+      }
+    }
+
+    window.alert(
+      'Share text copied to clipboard.\n\n' +
+        'On desktop, use the social icons in the Musiki share sheet:\n' +
+        '• Facebook — link share\n' +
+        '• FB Pages — post to your Pages\n' +
+        '• Instagram — download + caption',
+    );
     return;
   }
 
