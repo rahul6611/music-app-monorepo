@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -63,32 +63,49 @@ export default function CommunityShareSheet({
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const [showFacebookModal, setShowFacebookModal] = useState(false);
   const [showYouTubeModal, setShowYouTubeModal] = useState(false);
+  const [activePost, setActivePost] = useState<CommunityPostShareInput | null>(null);
 
-  const postLabel = post?.fileName || post?.title || 'Community post';
+  useEffect(() => {
+    if (post) {
+      setActivePost(post);
+    }
+  }, [post]);
+
+  const resolvedPost = activePost;
+  const postLabel = resolvedPost?.fileName || resolvedPost?.title || 'Community post';
 
   const runAction = async (actionId: string, action: () => Promise<void> | void) => {
-    if (!post || busyAction) return;
+    if (!resolvedPost || busyAction) return;
     setBusyAction(actionId);
     try {
       await action();
     } catch (error) {
       console.error('Share action failed:', error);
-      Alert.alert('Share failed', 'Something went wrong. Please try again.');
+      const message = error instanceof Error ? error.message : 'Something went wrong. Please try again.';
+      if (Platform.OS === 'web') {
+        window.alert(`Share failed: ${message}`);
+      } else {
+        Alert.alert('Share failed', message);
+      }
     } finally {
       setBusyAction(null);
     }
   };
 
   const everyoneActions = useMemo<EveryoneAction[]>(() => {
-    if (!post) return [];
+    if (!resolvedPost) return [];
     return [
       {
         id: 'copy-link',
         label: 'Copy link',
         icon: 'link-outline',
         onPress: async () => {
-          await copyCommunityPostLink(post);
-          Alert.alert('Copied', 'Musiki post link copied to clipboard.');
+          await copyCommunityPostLink(resolvedPost);
+          if (Platform.OS === 'web') {
+            window.alert('Musiki post link copied to clipboard.');
+          } else {
+            Alert.alert('Copied', 'Musiki post link copied to clipboard.');
+          }
           onClose();
         },
       },
@@ -97,8 +114,12 @@ export default function CommunityShareSheet({
         label: 'Copy Caption',
         icon: 'copy-outline',
         onPress: async () => {
-          await copyCommunityShareCaption(post);
-          Alert.alert('Copied', 'Caption copied. Paste it when you post.');
+          await copyCommunityShareCaption(resolvedPost);
+          if (Platform.OS === 'web') {
+            window.alert('Caption copied. Paste it when you post.');
+          } else {
+            Alert.alert('Copied', 'Caption copied. Paste it when you post.');
+          }
           onClose();
         },
       },
@@ -107,20 +128,20 @@ export default function CommunityShareSheet({
         label: 'More Apps',
         icon: 'share-outline',
         onPress: async () => {
-          await shareViaNativeSheet(post);
+          await shareViaNativeSheet(resolvedPost);
           onClose();
         },
       },
     ];
-  }, [post, onClose]);
+  }, [resolvedPost, onClose]);
 
   const platformActions = useMemo<PlatformAction[]>(() => {
-    if (!post) return [];
+    if (!resolvedPost) return [];
 
-    const isEmbed = isSocialEmbedPost(post.type);
-    const instagramEnabled = canShareMediaToInstagram(post.type);
-    const tiktokEnabled = canShareMediaToTikTok(post.type);
-    const youtubeEnabled = canShareMediaToYouTube(post.type);
+    const isEmbed = isSocialEmbedPost(resolvedPost.type);
+    const instagramEnabled = canShareMediaToInstagram(resolvedPost.type);
+    const tiktokEnabled = canShareMediaToTikTok(resolvedPost.type);
+    const youtubeEnabled = canShareMediaToYouTube(resolvedPost.type);
 
     return [
       {
@@ -128,7 +149,7 @@ export default function CommunityShareSheet({
         label: 'Facebook',
         renderIcon: () => <Ionicons name="logo-facebook" size={28} color="#FFFFFF" />,
         onPress: async () => {
-          await shareFacebookLink(post);
+          await shareFacebookLink(resolvedPost);
           onClose();
         },
       },
@@ -139,8 +160,8 @@ export default function CommunityShareSheet({
           <MaterialCommunityIcons name="facebook-messenger" size={28} color="#FFFFFF" />
         ),
         onPress: () => {
+          setShowFacebookModal(true);
           onClose();
-          setTimeout(() => setShowFacebookModal(true), 250);
         },
       },
       {
@@ -150,18 +171,12 @@ export default function CommunityShareSheet({
         renderIcon: () => <Ionicons name="logo-instagram" size={28} color="#FFFFFF" />,
         onPress: async () => {
           if (isEmbed) {
-            Alert.alert(
-              'Use Copy link',
-              'Embedded social links cannot be re-uploaded. Copy the Musiki link or share the caption instead.',
-            );
+            const msg = 'Embedded social links cannot be re-uploaded. Copy the Musiki link instead.';
+            Platform.OS === 'web' ? window.alert(msg) : Alert.alert('Use Copy link', msg);
             return;
           }
-          await copyCommunityShareCaption(post, 'instagram');
-          await shareMediaToSocialApps(post, 'instagram');
-          Alert.alert(
-            'Caption copied',
-            'Pick Instagram from the share sheet, then paste the caption before posting.',
-          );
+          await copyCommunityShareCaption(resolvedPost, 'instagram');
+          await shareMediaToSocialApps(resolvedPost, 'instagram');
           onClose();
         },
       },
@@ -172,15 +187,12 @@ export default function CommunityShareSheet({
         renderIcon: () => <Ionicons name="logo-tiktok" size={28} color="#FFFFFF" />,
         onPress: async () => {
           if (isEmbed) {
-            Alert.alert('Use Copy link', 'Embedded links cannot be shared as TikTok videos.');
+            const msg = 'Embedded links cannot be shared as TikTok videos.';
+            Platform.OS === 'web' ? window.alert(msg) : Alert.alert('Use Copy link', msg);
             return;
           }
-          await copyCommunityShareCaption(post);
-          await shareMediaToSocialApps(post);
-          Alert.alert(
-            'Caption copied',
-            'Pick TikTok from the share sheet, then paste the caption before posting.',
-          );
+          await copyCommunityShareCaption(resolvedPost);
+          await shareMediaToSocialApps(resolvedPost);
           onClose();
         },
       },
@@ -191,17 +203,17 @@ export default function CommunityShareSheet({
         renderIcon: () => <Ionicons name="logo-youtube" size={28} color="#FFFFFF" />,
         onPress: () => {
           if (!youtubeEnabled) {
-            showYouTubeUploadInfo(post);
+            showYouTubeUploadInfo(resolvedPost);
             return;
           }
+          setShowYouTubeModal(true);
           onClose();
-          setTimeout(() => setShowYouTubeModal(true), 250);
         },
       },
     ];
-  }, [post, onClose]);
+  }, [resolvedPost, onClose]);
 
-  if (!post) return null;
+  if (!resolvedPost) return null;
 
   return (
     <>
@@ -276,13 +288,13 @@ export default function CommunityShareSheet({
       <FacebookPublishModal
         visible={showFacebookModal}
         onClose={() => setShowFacebookModal(false)}
-        post={post}
+        post={resolvedPost}
         theme={theme}
       />
       <YouTubeUploadModal
         visible={showYouTubeModal}
         onClose={() => setShowYouTubeModal(false)}
-        post={post}
+        post={resolvedPost}
         theme={theme}
       />
     </>

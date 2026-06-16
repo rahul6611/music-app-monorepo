@@ -13,6 +13,10 @@ import * as WebBrowser from 'expo-web-browser';
 import { incrementShareAnalytics } from '@music-app/firebase';
 import { getWebAppBaseUrl } from './communityShareActions';
 
+const FB_TOKEN_KEY = 'fb_user_access_token';
+const YT_TOKEN_KEY = 'youtube_access_token';
+const YT_REFRESH_TOKEN_KEY = 'youtube_refresh_token';
+
 export async function getFacebookToken(): Promise<string | null> {
   return AsyncStorage.getItem(FB_TOKEN_KEY);
 }

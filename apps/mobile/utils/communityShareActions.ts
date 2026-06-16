@@ -10,7 +10,18 @@ import {
 } from '@music-app/utils';
 
 export function getWebAppBaseUrl(): string {
-  return process.env.EXPO_PUBLIC_WEB_APP_URL || 'https://musiki.vercel.app';
+  if (process.env.EXPO_PUBLIC_WEB_APP_URL) {
+    return process.env.EXPO_PUBLIC_WEB_APP_URL.replace(/\/$/, '');
+  }
+
+  if (Platform.OS === 'web' && typeof window !== 'undefined') {
+    const origin = window.location.origin.replace(/\/$/, '');
+    if (origin && !origin.includes('localhost') && !origin.includes('127.0.0.1')) {
+      return origin;
+    }
+  }
+
+  return 'https://musiki.vercel.app';
 }
 
 export function getPostShareUrls(post: CommunityPostShareInput) {
@@ -112,16 +123,27 @@ export async function shareMediaToSocialApps(
   post: CommunityPostShareInput,
   captionVariant: 'default' | 'instagram' = 'default',
 ): Promise<void> {
+  const { message, instagramCaption } = getPostShareUrls(post);
+  const caption = captionVariant === 'instagram' ? instagramCaption : message;
+
   if (Platform.OS === 'web') {
-    Alert.alert(
-      'Use the mobile app',
-      'Sharing media directly to Instagram or TikTok is available in the iOS and Android app.',
+    await Clipboard.setStringAsync(caption);
+    const opened = window.open(post.url, '_blank', 'noopener,noreferrer');
+    const platform = captionVariant === 'instagram' ? 'Instagram' : 'TikTok';
+    window.alert(
+      `${platform} on web:\n\n` +
+        '1. Caption copied to clipboard.\n' +
+        `2. Your ${post.type} opened in a new tab — download it.\n` +
+        `3. Open ${platform} and upload the file manually.\n` +
+        '4. Paste the caption before posting.\n\n' +
+        'For one-tap sharing, use the Musiki mobile app on iOS or Android.',
     );
+    if (!opened) {
+      window.alert(`Could not open media. Download manually from:\n${post.url}`);
+    }
     return;
   }
 
-  const { message, instagramCaption } = getPostShareUrls(post);
-  const caption = captionVariant === 'instagram' ? instagramCaption : message;
   const localUri = await downloadMediaForShare(post);
 
   await Share.share({
