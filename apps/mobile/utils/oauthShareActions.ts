@@ -368,6 +368,9 @@ export function getFacebookPermissionSetupSteps(missing: string[]): string {
     lines.splice(3, 0, `Missing on your current token: ${missing.join(', ')}`, '');
   }
 
+  return lines.join('\n');
+}
+
 export function isFacebookPermissionError(message: string): boolean {
   const lower = message.toLowerCase();
   return (
