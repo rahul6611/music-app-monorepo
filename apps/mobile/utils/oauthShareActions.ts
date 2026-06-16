@@ -14,8 +14,46 @@ import { incrementShareAnalytics } from '@music-app/firebase';
 import { getWebAppBaseUrl } from './communityShareActions';
 
 const FB_TOKEN_KEY = 'fb_user_access_token';
+const FB_PAGES_PREF_KEY = 'fb_pages_selection_pref';
 const YT_TOKEN_KEY = 'youtube_access_token';
 const YT_REFRESH_TOKEN_KEY = 'youtube_refresh_token';
+
+export const FACEBOOK_PAGE_PERMISSIONS = [
+  'pages_show_list',
+  'pages_manage_posts',
+  'pages_read_engagement',
+] as const;
+
+export interface FacebookPageAccount {
+  id: string;
+  name: string;
+  access_token: string;
+  tasks?: string[];
+}
+
+export interface FacebookPagePublishResult {
+  pageId: string;
+  pageName: string;
+  success: boolean;
+  error?: string;
+}
+
+export async function getSavedFacebookPagePreferences(): Promise<string[] | null> {
+  try {
+    const raw = await AsyncStorage.getItem(FB_PAGES_PREF_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+export async function saveFacebookPagePreferences(pageIds: string[]): Promise<void> {
+  await AsyncStorage.setItem(FB_PAGES_PREF_KEY, JSON.stringify(pageIds));
+}
+
+export async function clearFacebookPagePreferences(): Promise<void> {
+  await AsyncStorage.removeItem(FB_PAGES_PREF_KEY);
+}
 
 function parseOAuthReturnCode(resultUrl: string): string {
   const parsed = Linking.parse(resultUrl);
@@ -98,7 +136,7 @@ export async function refreshGoogleToken(): Promise<string> {
 /**
  * Initiates Facebook Login flow using WebBrowser
  */
-export async function loginWithFacebook(): Promise<string> {
+export async function loginWithFacebook(options?: { force?: boolean }): Promise<string> {
   const fbAppId = process.env.EXPO_PUBLIC_FACEBOOK_APP_ID;
   const fbConfigId = process.env.EXPO_PUBLIC_FACEBOOK_CONFIG_ID;
 
@@ -111,21 +149,30 @@ export async function loginWithFacebook(): Promise<string> {
   if (!fbConfigId) {
     throw new Error(
       'Missing EXPO_PUBLIC_FACEBOOK_CONFIG_ID.\n\n' +
-        'Facebook Login for Business requires a Configuration ID (not scope strings).\n' +
-        'Meta Developer → Facebook Login for Business → Configurations → Create configuration → copy config_id.',
+        'Facebook Login for Business requires a Configuration ID.\n' +
+        'Meta Developer → Facebook Login for Business → Configurations → add:\n' +
+        '• pages_show_list\n• pages_manage_posts\n• pages_read_engagement',
     );
+  }
+
+  if (options?.force) {
+    await clearFacebookToken();
   }
 
   const redirectUrl = Linking.createURL('oauth');
   const baseUrl = getWebAppBaseUrl();
   const callbackUrl = `${baseUrl}/api/facebook-callback`;
 
-  const authUrl = `https://www.facebook.com/v20.0/dialog/oauth` +
+  let authUrl = `https://www.facebook.com/v20.0/dialog/oauth` +
     `?client_id=${fbAppId}` +
     `&redirect_uri=${encodeURIComponent(callbackUrl)}` +
     `&state=${encodeURIComponent(redirectUrl)}` +
     `&config_id=${encodeURIComponent(fbConfigId)}` +
     `&response_type=code`;
+
+  if (options?.force) {
+    authUrl += '&auth_type=reauthorize';
+  }
 
   const result = await WebBrowser.openAuthSessionAsync(authUrl, redirectUrl);
 
@@ -143,10 +190,13 @@ export async function loginWithFacebook(): Promise<string> {
 }
 
 /**
- * Fetches Facebook Pages managed by the user
+ * Fetches Facebook Pages managed by the user (uses page access tokens from /me/accounts).
  */
-export async function fetchFacebookPages(token: string): Promise<any[]> {
-  const response = await fetch(`https://graph.facebook.com/v20.0/me/accounts?access_token=${token}`);
+export async function fetchFacebookPages(token: string): Promise<FacebookPageAccount[]> {
+  const fields = encodeURIComponent('id,name,access_token,tasks');
+  const response = await fetch(
+    `https://graph.facebook.com/v20.0/me/accounts?fields=${fields}&limit=100&access_token=${encodeURIComponent(token)}`,
+  );
   if (!response.ok) {
     if (response.status === 401) {
       await clearFacebookToken();
@@ -155,68 +205,131 @@ export async function fetchFacebookPages(token: string): Promise<any[]> {
     throw new Error(`Failed to fetch pages: ${await response.text()}`);
   }
   const data = await response.json();
-  return data.data || [];
+  return (data.data || []) as FacebookPageAccount[];
+}
+
+function parseFacebookApiError(raw: string): string {
+  try {
+    const parsed = JSON.parse(raw);
+    return parsed?.error?.message || raw;
+  } catch {
+    return raw;
+  }
+}
+
+async function publishToSingleFacebookPage({
+  page,
+  caption,
+  publishType,
+  post,
+  webUrl,
+}: {
+  page: FacebookPageAccount;
+  caption: string;
+  publishType: 'link' | 'media';
+  post: any;
+  webUrl: string;
+}): Promise<void> {
+  const isVideo = post.type === 'video';
+  const isImage = post.type === 'image';
+
+  let url = `https://graph.facebook.com/v20.0/${page.id}/feed`;
+  const bodyParams: Record<string, string> = {
+    access_token: page.access_token,
+  };
+
+  if (publishType === 'media' && (isVideo || isImage)) {
+    if (isVideo) {
+      url = `https://graph.facebook.com/v20.0/${page.id}/videos`;
+      bodyParams.description = caption;
+      bodyParams.file_url = post.url;
+    } else {
+      url = `https://graph.facebook.com/v20.0/${page.id}/photos`;
+      bodyParams.caption = caption;
+      bodyParams.url = post.url;
+    }
+  } else {
+    bodyParams.message = caption;
+    bodyParams.link = webUrl;
+  }
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(bodyParams),
+  });
+
+  if (!response.ok) {
+    const err = await response.text();
+    throw new Error(parseFacebookApiError(err));
+  }
 }
 
 /**
- * Publishes a post to multiple selected Facebook Pages
+ * Publishes to multiple Facebook Pages and returns per-page results (bulk publish).
  */
 export async function publishToFacebookPages({
   pages,
   caption,
   publishType,
   post,
+  onProgress,
 }: {
-  pages: Array<{ id: string; access_token: string; name: string }>;
+  pages: FacebookPageAccount[];
   caption: string;
   publishType: 'link' | 'media';
   post: any;
-}): Promise<void> {
+  onProgress?: (result: FacebookPagePublishResult, index: number, total: number) => void;
+}): Promise<FacebookPagePublishResult[]> {
   const webUrl = `${getWebAppBaseUrl()}/community/post/${post.id}`;
-  
-  const promises = pages.map(async (page) => {
-    let url = `https://graph.facebook.com/v20.0/${page.id}/feed`;
-    let bodyParams: Record<string, string> = {
-      access_token: page.access_token,
-    };
+  const results: FacebookPagePublishResult[] = [];
 
-    const isVideo = post.type === 'video';
-    const isImage = post.type === 'image';
-
-    if (publishType === 'media' && (isVideo || isImage)) {
-      if (isVideo) {
-        url = `https://graph.facebook.com/v20.0/${page.id}/videos`;
-        bodyParams.description = caption;
-        bodyParams.file_url = post.url;
-      } else {
-        url = `https://graph.facebook.com/v20.0/${page.id}/photos`;
-        bodyParams.caption = caption;
-        bodyParams.url = post.url;
-      }
-    } else {
-      // Default: Link Share
-      bodyParams.message = caption;
-      bodyParams.link = webUrl;
+  for (let index = 0; index < pages.length; index += 1) {
+    const page = pages[index];
+    try {
+      await publishToSingleFacebookPage({
+        page,
+        caption,
+        publishType,
+        post,
+        webUrl,
+      });
+      const result: FacebookPagePublishResult = {
+        pageId: page.id,
+        pageName: page.name,
+        success: true,
+      };
+      results.push(result);
+      onProgress?.(result, index, pages.length);
+    } catch (error: any) {
+      const result: FacebookPagePublishResult = {
+        pageId: page.id,
+        pageName: page.name,
+        success: false,
+        error: error?.message || 'Unknown error',
+      };
+      results.push(result);
+      onProgress?.(result, index, pages.length);
     }
+  }
 
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(bodyParams),
-    });
+  const successCount = results.filter((r) => r.success).length;
+  if (successCount > 0) {
+    await incrementShareAnalytics(post.id, 'facebook');
+  }
 
-    if (!response.ok) {
-      const err = await response.text();
-      throw new Error(`Failed to post to page "${page.name}": ${err}`);
-    }
-  });
+  return results;
+}
 
-  await Promise.all(promises);
-  
-  // Track Share Analytics in Firestore
-  await incrementShareAnalytics(post.id, 'facebook');
+export function isFacebookPermissionError(message: string): boolean {
+  const lower = message.toLowerCase();
+  return (
+    lower.includes('pages_read_engagement') ||
+    lower.includes('pages_manage_posts') ||
+    lower.includes('permission') ||
+    lower.includes('(#200)') ||
+    lower.includes('(#283)')
+  );
 }
 
 /**
