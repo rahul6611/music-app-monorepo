@@ -17,5 +17,9 @@ declare namespace NodeJS {
     EXPO_PUBLIC_JITSI_VIDEO_QUALITY?: string;
     /** Set to "true" for music lessons (less aggressive noise suppression) */
     EXPO_PUBLIC_JITSI_DISABLE_NOISE_SUPPRESSION?: string;
+    /** Public web app URL used in community share links */
+    EXPO_PUBLIC_WEB_APP_URL?: string;
+    EXPO_PUBLIC_FACEBOOK_APP_ID?: string;
+    EXPO_PUBLIC_GOOGLE_CLIENT_ID?: string;
   }
 }

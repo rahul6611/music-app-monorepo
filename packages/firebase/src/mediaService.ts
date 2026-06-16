@@ -299,6 +299,35 @@ export const updateChapters = async (
   }
 };
 
+export const incrementShareAnalytics = async (
+  postId: string,
+  platform: string,
+): Promise<void> => {
+  try {
+    const postRef = doc(db, 'media', postId);
+    await updateDoc(postRef, {
+      shareCount: increment(1),
+      [`shareCounts.${platform}`]: increment(1),
+    });
+  } catch (error) {
+    console.warn('Share analytics update failed:', error);
+  }
+};
+
+export const getCommunityPostById = async (postId: string): Promise<any | null> => {
+  try {
+    const postRef = doc(db, 'media', postId);
+    const snapshot = await getDoc(postRef);
+    if (!snapshot.exists()) {
+      return null;
+    }
+    return { id: snapshot.id, ...snapshot.data() };
+  } catch (error) {
+    console.error('❌ Failed to fetch community post:', error);
+    return null;
+  }
+};
+
 export const getMediaFeed = async (lastDoc: any = null, pageSize: number = 5): Promise<FeedResponse> => {
   try {
     let q;

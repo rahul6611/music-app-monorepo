@@ -3,6 +3,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@music-app/store';
 import React, { useState } from 'react';
+import { useLocalSearchParams } from 'expo-router';
 import MediaPostCreator from '../../components/community/MediaPostCreator';
 import MediaFeed from '../../components/community/MediaFeed';
 import { useMediaRecovery } from '../../hooks/useMediaRecovery';
@@ -12,6 +13,8 @@ import { Alert } from 'react-native';
 
 export default function Community() {
   const theme = useTheme();
+  const params = useLocalSearchParams<{ postId?: string | string[] }>();
+  const postId = Array.isArray(params.postId) ? params.postId[0] : params.postId;
   const { width: windowWidth } = useWindowDimensions();
   const isWebDesktop = Platform.OS === 'web' && windowWidth >= 768;
   const styles = createStyles(theme, isWebDesktop);
@@ -85,7 +88,7 @@ export default function Community() {
           <Text style={styles.addButtonText}>Post</Text>
         </TouchableOpacity>
       </View>
-      <MediaFeed refreshTrigger={refreshTrigger} />
+      <MediaFeed refreshTrigger={refreshTrigger} highlightPostId={postId} />
       <Modal
         visible={isSheetVisible}
         transparent={true}

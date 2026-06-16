@@ -1,0 +1,150 @@
+import { Alert, Linking, Platform, Share } from 'react-native';
+import * as Clipboard from 'expo-clipboard';
+import * as FileSystem from 'expo-file-system/legacy';
+import {
+  buildCommunityShareMessage,
+  buildInstagramCaption,
+  CommunityPostShareInput,
+  getCommunityPostWebUrl,
+  getShareMediaExtension,
+} from '@music-app/utils';
+
+export function getWebAppBaseUrl(): string {
+  return process.env.EXPO_PUBLIC_WEB_APP_URL || 'https://musiki.vercel.app';
+}
+
+export function getPostShareUrls(post: CommunityPostShareInput) {
+  const webUrl = getCommunityPostWebUrl(post.id, getWebAppBaseUrl());
+  const message = buildCommunityShareMessage(post, webUrl);
+  const instagramCaption = buildInstagramCaption(post, webUrl);
+  return { webUrl, message, instagramCaption };
+}
+
+export async function copyCommunityPostLink(post: CommunityPostShareInput): Promise<string> {
+  const { webUrl } = getPostShareUrls(post);
+  await Clipboard.setStringAsync(webUrl);
+  return webUrl;
+}
+
+export async function copyCommunityShareCaption(
+  post: CommunityPostShareInput,
+  variant: 'default' | 'instagram' = 'default',
+): Promise<string> {
+  const { message, instagramCaption } = getPostShareUrls(post);
+  const text = variant === 'instagram' ? instagramCaption : message;
+  await Clipboard.setStringAsync(text);
+  return text;
+}
+
+export async function shareViaNativeSheet(post: CommunityPostShareInput): Promise<void> {
+  const { webUrl, message } = getPostShareUrls(post);
+
+  if (Platform.OS === 'web') {
+    if (typeof navigator !== 'undefined' && navigator.share) {
+      await navigator.share({ title: 'Musiki', text: message, url: webUrl });
+      return;
+    }
+    await Clipboard.setStringAsync(message);
+    Alert.alert('Copied', 'Share text copied to clipboard.');
+    return;
+  }
+
+  await Share.share(
+    Platform.OS === 'ios'
+      ? { message, url: webUrl }
+      : { message, title: 'Musiki' },
+  );
+}
+
+export async function shareFacebookLink(post: CommunityPostShareInput): Promise<void> {
+  const { webUrl } = getPostShareUrls(post);
+  const sharerUrl = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(webUrl)}`;
+
+  if (Platform.OS === 'web') {
+    try {
+      const healthCheck = await fetch(webUrl, { method: 'HEAD' });
+      if (!healthCheck.ok) {
+        Alert.alert(
+          'Share link not live yet',
+          `Facebook cannot preview this link because ${webUrl} returned ${healthCheck.status}.\n\n` +
+            'Deploy the latest code to Vercel (apps/mobile) and set FIREBASE_SERVICE_ACCOUNT on Vercel. ' +
+            'The Facebook App ID does not fix link previews — the URL must exist on your server first.',
+        );
+      }
+    } catch {
+      Alert.alert(
+        'Share link not reachable',
+        `Could not reach ${webUrl}. Deploy to Vercel and set EXPO_PUBLIC_WEB_APP_URL in apps/mobile/.env, then restart Metro.`,
+      );
+    }
+
+    window.open(sharerUrl, '_blank', 'noopener,noreferrer');
+    return;
+  }
+
+  const canOpen = await Linking.canOpenURL(sharerUrl);
+  if (canOpen) {
+    await Linking.openURL(sharerUrl);
+    return;
+  }
+
+  await shareViaNativeSheet(post);
+}
+
+async function downloadMediaForShare(
+  post: CommunityPostShareInput,
+): Promise<string> {
+  const extension = getShareMediaExtension(post.type, post.url);
+  const localUri = `${FileSystem.cacheDirectory}musiki-share-${post.id}.${extension}`;
+  const existing = await FileSystem.getInfoAsync(localUri);
+  if (existing.exists && existing.size && existing.size > 0) {
+    return localUri;
+  }
+
+  const download = await FileSystem.downloadAsync(post.url, localUri);
+  if (!download.uri) {
+    throw new Error('Could not download media for sharing.');
+  }
+  return download.uri;
+}
+
+export async function shareMediaToSocialApps(
+  post: CommunityPostShareInput,
+  captionVariant: 'default' | 'instagram' = 'default',
+): Promise<void> {
+  if (Platform.OS === 'web') {
+    Alert.alert(
+      'Use the mobile app',
+      'Sharing media directly to Instagram or TikTok is available in the iOS and Android app.',
+    );
+    return;
+  }
+
+  const { message, instagramCaption } = getPostShareUrls(post);
+  const caption = captionVariant === 'instagram' ? instagramCaption : message;
+  const localUri = await downloadMediaForShare(post);
+
+  await Share.share({
+    message: caption,
+    url: localUri,
+  });
+}
+
+export function showYouTubeUploadInfo(post: CommunityPostShareInput): void {
+  const { webUrl } = getPostShareUrls(post);
+  Alert.alert(
+    'Video required',
+    'YouTube sharing is only available for video posts uploaded to Musiki.',
+    [
+      { text: 'OK', style: 'cancel' },
+      {
+        text: 'Copy Musiki link',
+        onPress: () => {
+          Clipboard.setStringAsync(webUrl).then(() => {
+            Alert.alert('Copied', 'Musiki post link copied.');
+          });
+        },
+      },
+    ],
+  );
+}

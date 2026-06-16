@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   View, Text, Image, StyleSheet, FlatList, TouchableOpacity, 
-  Dimensions, ActivityIndicator, Share, Modal, TextInput, 
+  Dimensions, ActivityIndicator, Modal, TextInput, 
   KeyboardAvoidingView, Platform, Pressable, Keyboard, Linking,
   useWindowDimensions, ScrollView
 } from 'react-native';
@@ -9,15 +9,22 @@ import { useVideoPlayer, VideoView } from 'expo-video';
 import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
 import { Ionicons, Feather, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useTheme } from '@music-app/store';
-import { getMediaFeed, toggleLike, addComment, subscribeToComments } from '@music-app/firebase';
+import { getMediaFeed, getCommunityPostById, toggleLike, addComment, subscribeToComments } from '@music-app/firebase';
 import { useAuthStore } from '@music-app/store';
 import { parseSocialVideo, getSocialTypeLabel, SocialVideoType } from '@music-app/utils';
 import VideoPlayerWithChapters from '../video/VideoPlayerWithChapters';
+import CommunityShareSheet from './CommunityShareSheet';
 
 const { width } = Dimensions.get('window');
 const PAGE_SIZE = 5;
 
-export default function MediaFeed({ refreshTrigger }: { refreshTrigger: number }) {
+export default function MediaFeed({
+  refreshTrigger,
+  highlightPostId,
+}: {
+  refreshTrigger: number;
+  highlightPostId?: string;
+}) {
   const theme = useTheme();
   const { width: windowWidth } = useWindowDimensions();
   const [mediaItems, setMediaItems] = useState<any[]>([]);
@@ -26,6 +33,8 @@ export default function MediaFeed({ refreshTrigger }: { refreshTrigger: number }
   const [lastDoc, setLastDoc] = useState<any>(null);
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
+  const [sharePost, setSharePost] = useState<any | null>(null);
+  const flatListRef = useRef<FlatList>(null);
 
   const fetchFeed = async (isRefreshing = false) => {
     if (isRefreshing) {
@@ -76,12 +85,54 @@ export default function MediaFeed({ refreshTrigger }: { refreshTrigger: number }
     fetchFeed();
   }, [refreshTrigger]);
 
+  useEffect(() => {
+    if (!highlightPostId || loading) return;
+
+    const ensureHighlightedPost = async () => {
+      setMediaItems((prev) => {
+        const existingIndex = prev.findIndex((item) => item.id === highlightPostId);
+        if (existingIndex >= 0) {
+          setTimeout(() => {
+            flatListRef.current?.scrollToIndex({
+              index: existingIndex,
+              animated: true,
+              viewPosition: 0.2,
+            });
+          }, 250);
+        }
+        return prev;
+      });
+
+      const post = await getCommunityPostById(highlightPostId);
+      if (!post) return;
+
+      setMediaItems((prev) => {
+        if (prev.some((item) => item.id === post.id)) {
+          return prev;
+        }
+        setTimeout(() => {
+          flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
+        }, 250);
+        return [post, ...prev];
+      });
+    };
+
+    ensureHighlightedPost();
+  }, [highlightPostId, loading]);
+
   const onRefresh = () => {
     fetchFeed(true);
   };
 
   const renderItem = ({ item }: { item: any }) => {
-    return <MediaCard item={item} theme={theme} />;
+    return (
+      <MediaCard
+        item={item}
+        theme={theme}
+        highlighted={item.id === highlightPostId}
+        onShare={() => setSharePost(item)}
+      />
+    );
   };
 
   if (loading) {
@@ -105,7 +156,12 @@ export default function MediaFeed({ refreshTrigger }: { refreshTrigger: number }
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'flex-start', gap: 20 }}>
             {mediaItems.map((item) => (
               <View key={item.id} style={{ width: windowWidth > 1300 ? '31%' : '48%', minWidth: 320, marginBottom: 10 }}>
-                <MediaCard item={item} theme={theme} />
+                <MediaCard
+                  item={item}
+                  theme={theme}
+                  highlighted={item.id === highlightPostId}
+                  onShare={() => setSharePost(item)}
+                />
               </View>
             ))}
           </View>
@@ -130,12 +186,19 @@ export default function MediaFeed({ refreshTrigger }: { refreshTrigger: number }
             </View>
           )}
         </ScrollView>
+        <CommunityShareSheet
+          visible={!!sharePost}
+          post={sharePost}
+          onClose={() => setSharePost(null)}
+        />
       </View>
     );
   }
 
   return (
+    <>
     <FlatList
+      ref={flatListRef}
       data={mediaItems}
       renderItem={renderItem}
       keyExtractor={(item) => item.id}
@@ -167,7 +230,16 @@ export default function MediaFeed({ refreshTrigger }: { refreshTrigger: number }
           <Text style={[styles.emptyText, { color: theme.textSecondary }]}>No posts yet. Be the first to share!</Text>
         </View>
       }
+      onScrollToIndexFailed={() => {
+        flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
+      }}
     />
+    <CommunityShareSheet
+      visible={!!sharePost}
+      post={sharePost}
+      onClose={() => setSharePost(null)}
+    />
+    </>
   );
 }
 
@@ -258,7 +330,17 @@ function SocialMediaContent({ item, theme }: { item: any; theme: any }) {
   );
 }
 
-function MediaCard({ item, theme }: { item: any; theme: any }) {
+function MediaCard({
+  item,
+  theme,
+  onShare,
+  highlighted = false,
+}: {
+  item: any;
+  theme: any;
+  onShare: () => void;
+  highlighted?: boolean;
+}) {
   const { user } = useAuthStore();
   const [localLikes, setLocalLikes] = useState(item.likesCount || 0);
   const [localLiked, setLocalLiked] = useState(item.likes?.includes(user?.uid) || false);
@@ -289,21 +371,21 @@ function MediaCard({ item, theme }: { item: any; theme: any }) {
     }
   };
 
-  const onShare = async () => {
-    try {
-      await Share.share({
-        message: `Check out this ${item.type} on Musiki: ${item.url}`,
-        url: item.url,
-      });
-    } catch (error) {
-      console.error('Error sharing:', error);
-    }
+  const onSharePress = () => {
+    onShare();
   };
 
   const isSocial = ['youtube', 'facebook', 'instagram', 'tiktok'].includes(item.type);
 
   return (
-    <View style={[styles.card, { backgroundColor: theme.card, borderColor: theme.border }]}>
+    <View style={[
+      styles.card,
+      {
+        backgroundColor: theme.card,
+        borderColor: highlighted ? theme.primary : theme.border,
+        borderWidth: highlighted ? 2 : 1,
+      },
+    ]}>
       <View style={styles.cardHeader}>
         <View style={[styles.avatarPlaceholder, { backgroundColor: theme.primary }]}>
           <Text style={styles.avatarText}>{item.type?.[0]?.toUpperCase() || 'M'}</Text>
@@ -381,7 +463,7 @@ function MediaCard({ item, theme }: { item: any; theme: any }) {
           </Text>
         </TouchableOpacity>
         
-        <TouchableOpacity style={styles.footerAction} onPress={onShare}>
+        <TouchableOpacity style={styles.footerAction} onPress={onSharePress}>
           <Ionicons name="share-social-outline" size={20} color={theme.textSecondary} />
           <Text style={[styles.footerText, { color: theme.textSecondary }]}>Share</Text>
         </TouchableOpacity>

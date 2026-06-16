@@ -57,6 +57,7 @@
     },
     "owner": "pb2025org",
     "plugins": [
+      "expo-web-browser",
       "expo-router",
       [
         "expo-audio",

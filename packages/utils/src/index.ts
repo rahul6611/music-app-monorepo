@@ -1,3 +1,4 @@
+export * from './communityShare';
 export * from './socialEmbed';
 export * from './categoriesConfig';
 export * from './libraryCategories';

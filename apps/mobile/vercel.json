@@ -1,6 +1,37 @@
 {
+  "buildCommand": "npm run build:web",
+  "installCommand": "cd ../.. && npm install",
   "outputDirectory": "dist",
+  "functions": {
+    "api/**/*.ts": {
+      "maxDuration": 15
+    }
+  },
   "rewrites": [
+    {
+      "source": "/community/post/:id",
+      "destination": "/api/post-preview?id=:id"
+    },
+    {
+      "source": "/api/facebook-callback",
+      "destination": "/api/auth/facebook-callback"
+    },
+    {
+      "source": "/api/facebook-token",
+      "destination": "/api/auth/facebook-token"
+    },
+    {
+      "source": "/api/google-callback",
+      "destination": "/api/auth/google-callback"
+    },
+    {
+      "source": "/api/google-token",
+      "destination": "/api/auth/google-token"
+    },
+    {
+      "source": "/api/google-refresh",
+      "destination": "/api/auth/google-refresh"
+    },
     {
       "source": "/(.*)",
       "destination": "/index.html"

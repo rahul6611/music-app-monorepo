@@ -1,5 +1,6 @@
 import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
+import * as WebBrowser from 'expo-web-browser';
 import { useEffect, useState } from 'react';
 import { View, StyleSheet, Platform } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -24,6 +25,8 @@ import GlobalUploadProgress from '../components/ui/GlobalUploadProgress';
 try {
   (StyleSheet as any).setFlag?.('darkMode', 'class');
 } catch (e) {}
+
+WebBrowser.maybeCompleteAuthSession();
 
 SplashScreen.preventAutoHideAsync();
 
@@ -133,6 +136,8 @@ export default function RootLayout() {
                 animation: 'slide_from_right',
               }} 
             />
+            <Stack.Screen name="community/post/[id]" />
+            <Stack.Screen name="oauth" options={{ headerShown: false }} />
           </Stack>
         </View>
         <CameraOverlay />
