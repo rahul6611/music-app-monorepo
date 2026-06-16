@@ -20,6 +20,7 @@ declare namespace NodeJS {
     /** Public web app URL used in community share links */
     EXPO_PUBLIC_WEB_APP_URL?: string;
     EXPO_PUBLIC_FACEBOOK_APP_ID?: string;
+    EXPO_PUBLIC_FACEBOOK_CONFIG_ID?: string;
     EXPO_PUBLIC_GOOGLE_CLIENT_ID?: string;
   }
 }

@@ -85,9 +85,19 @@ export async function refreshGoogleToken(): Promise<string> {
  */
 export async function loginWithFacebook(): Promise<string> {
   const fbAppId = process.env.EXPO_PUBLIC_FACEBOOK_APP_ID;
+  const fbConfigId = process.env.EXPO_PUBLIC_FACEBOOK_CONFIG_ID;
+
   if (!fbAppId) {
     throw new Error(
       'Missing EXPO_PUBLIC_FACEBOOK_APP_ID in apps/mobile/.env. Add your Meta App ID and restart Metro (npx expo start -c).',
+    );
+  }
+
+  if (!fbConfigId) {
+    throw new Error(
+      'Missing EXPO_PUBLIC_FACEBOOK_CONFIG_ID.\n\n' +
+        'Facebook Login for Business requires a Configuration ID (not scope strings).\n' +
+        'Meta Developer → Facebook Login for Business → Configurations → Create configuration → copy config_id.',
     );
   }
 
@@ -99,7 +109,7 @@ export async function loginWithFacebook(): Promise<string> {
     `?client_id=${fbAppId}` +
     `&redirect_uri=${encodeURIComponent(callbackUrl)}` +
     `&state=${encodeURIComponent(redirectUrl)}` +
-    `&scope=pages_manage_posts,pages_read_engagement,pages_show_list` +
+    `&config_id=${encodeURIComponent(fbConfigId)}` +
     `&response_type=code`;
 
   const result = await WebBrowser.openAuthSessionAsync(authUrl, redirectUrl);
