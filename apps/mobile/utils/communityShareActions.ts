@@ -2,9 +2,11 @@ import { Alert, Linking, Platform, Share } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import * as FileSystem from 'expo-file-system/legacy';
 import {
+  buildCommunityOgDescription,
   buildCommunityShareMessage,
   buildInstagramCaption,
   CommunityPostShareInput,
+  getCommunityPostDisplayTitle,
   getCommunityPostWebUrl,
   getShareMediaExtension,
 } from '@music-app/utils';
@@ -24,9 +26,148 @@ export function getWebAppBaseUrl(): string {
   return 'https://musiki.vercel.app';
 }
 
-function isMobileWebBrowser(): boolean {
-  if (typeof navigator === 'undefined') return false;
-  return /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+function showWebNotice(message: string): void {
+  if (Platform.OS === 'web' && typeof window !== 'undefined') {
+    window.alert(message);
+    return;
+  }
+  Alert.alert('Musiki', message);
+}
+
+async function copyTextForShare(text: string): Promise<void> {
+  if (Platform.OS === 'web' && typeof document !== 'undefined') {
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text);
+        return;
+      }
+    } catch {
+      // Fall through to legacy copy.
+    }
+
+    const textarea = document.createElement('textarea');
+    textarea.value = text;
+    textarea.style.position = 'fixed';
+    textarea.style.left = '-9999px';
+    document.body.appendChild(textarea);
+    textarea.focus();
+    textarea.select();
+    document.execCommand('copy');
+    document.body.removeChild(textarea);
+    return;
+  }
+
+  await Clipboard.setStringAsync(text);
+}
+
+async function downloadMediaOnWeb(post: CommunityPostShareInput): Promise<void> {
+  if (Platform.OS !== 'web' || typeof document === 'undefined') {
+    throw new Error('Web download is only available in the browser.');
+  }
+
+  const extension = getShareMediaExtension(post.type, post.url);
+  const filename = post.fileName || `musiki-${post.id}.${extension}`;
+
+  try {
+    const response = await fetch(post.url);
+    if (!response.ok) {
+      throw new Error(`Could not download media (${response.status}).`);
+    }
+
+    const blob = await response.blob();
+    const objectUrl = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = objectUrl;
+    anchor.download = filename;
+    anchor.rel = 'noopener';
+    document.body.appendChild(anchor);
+    anchor.click();
+    document.body.removeChild(anchor);
+    URL.revokeObjectURL(objectUrl);
+    return;
+  } catch {
+    const anchor = document.createElement('a');
+    anchor.href = post.url;
+    anchor.download = filename;
+    anchor.target = '_blank';
+    anchor.rel = 'noopener noreferrer';
+    document.body.appendChild(anchor);
+    anchor.click();
+    document.body.removeChild(anchor);
+  }
+}
+
+function openWebUrl(url: string): void {
+  if (Platform.OS === 'web' && typeof window !== 'undefined') {
+    const opened = window.open(url, '_blank', 'noopener,noreferrer');
+    if (!opened) {
+      window.location.assign(url);
+    }
+    return;
+  }
+  Linking.openURL(url);
+}
+
+async function openExternalUrl(url: string): Promise<void> {
+  if (Platform.OS === 'web') {
+    window.open(url, '_blank', 'noopener,noreferrer');
+    return;
+  }
+
+  const canOpen = await Linking.canOpenURL(url);
+  if (canOpen) {
+    await Linking.openURL(url);
+    return;
+  }
+
+  throw new Error('Could not open Facebook.');
+}
+
+async function warnIfShareLinkUnreachable(webUrl: string): Promise<void> {
+  if (Platform.OS !== 'web') return;
+
+  try {
+    const healthCheck = await fetch(webUrl, { method: 'GET', redirect: 'follow' });
+    if (!healthCheck.ok) {
+      Alert.alert(
+        'Share link not live yet',
+        `Facebook cannot preview this link because ${webUrl} returned ${healthCheck.status}.\n\n` +
+          'Deploy the latest code to Vercel and publish updated Firebase rules so Musiki can read shared posts.',
+      );
+    }
+  } catch {
+    Alert.alert(
+      'Share link not reachable',
+      `Could not reach ${webUrl}. Deploy to Vercel and set EXPO_PUBLIC_WEB_APP_URL in apps/mobile/.env, then restart Metro.`,
+    );
+  }
+}
+
+export function buildFacebookProfileShareUrl(webUrl: string): string {
+  return `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(webUrl)}`;
+}
+
+export function buildFacebookPageShareUrl(postId: string): string {
+  const baseUrl = getWebAppBaseUrl();
+  return `${baseUrl}/api/facebook-page-composer?postId=${encodeURIComponent(postId)}`;
+}
+
+function buildLocalFacebookPageComposerUrl(post: CommunityPostShareInput, webUrl: string): string | null {
+  const assetId = process.env.EXPO_PUBLIC_FACEBOOK_PAGE_ASSET_ID;
+  const businessId = process.env.EXPO_PUBLIC_FACEBOOK_BUSINESS_ID;
+  if (!assetId || !businessId) return null;
+
+  const params = new URLSearchParams({
+    asset_id: assetId,
+    business_id: businessId,
+    link: webUrl,
+    url: webUrl,
+    link_url: webUrl,
+    title: getCommunityPostDisplayTitle(post),
+    description: buildCommunityOgDescription(post),
+  });
+
+  return `https://business.facebook.com/latest/composer?${params.toString()}`;
 }
 
 export function getPostShareUrls(post: CommunityPostShareInput) {
@@ -38,7 +179,7 @@ export function getPostShareUrls(post: CommunityPostShareInput) {
 
 export async function copyCommunityPostLink(post: CommunityPostShareInput): Promise<string> {
   const { webUrl } = getPostShareUrls(post);
-  await Clipboard.setStringAsync(webUrl);
+  await copyTextForShare(webUrl);
   return webUrl;
 }
 
@@ -48,7 +189,7 @@ export async function copyCommunityShareCaption(
 ): Promise<string> {
   const { message, instagramCaption } = getPostShareUrls(post);
   const text = variant === 'instagram' ? instagramCaption : message;
-  await Clipboard.setStringAsync(text);
+  await copyTextForShare(text);
   return text;
 }
 
@@ -56,24 +197,19 @@ export async function shareViaNativeSheet(post: CommunityPostShareInput): Promis
   const { webUrl, message } = getPostShareUrls(post);
 
   if (Platform.OS === 'web') {
-    await Clipboard.setStringAsync(message);
+    await copyTextForShare(message);
 
-    // Desktop Windows/macOS Web Share API shows the OS "Share link" popup — avoid on desktop.
-    if (isMobileWebBrowser() && typeof navigator !== 'undefined' && navigator.share) {
+    if (typeof navigator !== 'undefined' && typeof navigator.share === 'function') {
       try {
         await navigator.share({ title: 'Musiki', text: message, url: webUrl });
         return;
-      } catch {
-        // User cancelled or share failed — fall through to clipboard message.
+      } catch (error: any) {
+        if (error?.name === 'AbortError') return;
       }
     }
 
-    window.alert(
-      'Share text copied to clipboard.\n\n' +
-        'On desktop, use the social icons in the Musiki share sheet:\n' +
-        '• Facebook — link share\n' +
-        '• FB Pages — post to your Pages\n' +
-        '• Instagram — download + caption',
+    showWebNotice(
+      'Share text copied to clipboard.\n\nPaste it into WhatsApp, email, Messages, or any other app.',
     );
     return;
   }
@@ -85,39 +221,66 @@ export async function shareViaNativeSheet(post: CommunityPostShareInput): Promis
   );
 }
 
-export async function shareFacebookLink(post: CommunityPostShareInput): Promise<void> {
+export async function shareToInstagramWeb(post: CommunityPostShareInput): Promise<void> {
+  const { instagramCaption } = getPostShareUrls(post);
+  await copyTextForShare(instagramCaption);
+  await downloadMediaOnWeb(post);
+  openWebUrl('https://www.instagram.com/');
+  showWebNotice(
+    'Instagram on web:\n\n' +
+      '1. Caption copied to clipboard.\n' +
+      '2. Your media file was downloaded.\n' +
+      '3. Instagram opened — click Create → upload the downloaded file → paste caption.',
+  );
+}
+
+export async function shareToTikTokWeb(post: CommunityPostShareInput): Promise<void> {
+  const { message } = getPostShareUrls(post);
+  await copyTextForShare(message);
+  await downloadMediaOnWeb(post);
+  openWebUrl('https://www.tiktok.com/upload');
+  showWebNotice(
+    'TikTok on web:\n\n' +
+      '1. Caption copied to clipboard.\n' +
+      '2. Your video was downloaded.\n' +
+      '3. TikTok upload opened — select the downloaded file → paste caption.',
+  );
+}
+
+export async function shareToYouTubeWeb(post: CommunityPostShareInput): Promise<void> {
+  const title = getCommunityPostDisplayTitle(post);
+  const description = `${post.notes?.trim() ? `${post.notes.trim()}\n\n` : ''}Shared from Musiki Community.`;
+  await copyTextForShare(`Title: ${title}\n\nDescription:\n${description}`);
+  await downloadMediaOnWeb(post);
+  openWebUrl('https://studio.youtube.com/');
+  showWebNotice(
+    'YouTube on web:\n\n' +
+      '1. Title + description copied to clipboard.\n' +
+      '2. Your video was downloaded.\n' +
+      '3. YouTube Studio opened — click Create → Upload → select the file → paste details.',
+  );
+}
+
+/** Opens Facebook sharer for personal profile/timeline. */
+export async function shareFacebookLinkToProfile(post: CommunityPostShareInput): Promise<void> {
   const { webUrl } = getPostShareUrls(post);
-  const sharerUrl = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(webUrl)}`;
+  await warnIfShareLinkUnreachable(webUrl);
+  await openExternalUrl(buildFacebookProfileShareUrl(webUrl));
+}
 
-  if (Platform.OS === 'web') {
-    try {
-      const healthCheck = await fetch(webUrl, { method: 'HEAD' });
-      if (!healthCheck.ok) {
-        Alert.alert(
-          'Share link not live yet',
-          `Facebook cannot preview this link because ${webUrl} returned ${healthCheck.status}.\n\n` +
-            'Deploy the latest code to Vercel (apps/mobile) and set FIREBASE_SERVICE_ACCOUNT on Vercel. ' +
-            'The Facebook App ID does not fix link previews — the URL must exist on your server first.',
-        );
-      }
-    } catch {
-      Alert.alert(
-        'Share link not reachable',
-        `Could not reach ${webUrl}. Deploy to Vercel and set EXPO_PUBLIC_WEB_APP_URL in apps/mobile/.env, then restart Metro.`,
-      );
-    }
+/** Opens Meta Business Suite composer with Musiki link + preview metadata. */
+export async function shareFacebookLinkToPage(post: CommunityPostShareInput): Promise<void> {
+  const { webUrl } = getPostShareUrls(post);
+  await warnIfShareLinkUnreachable(webUrl);
 
-    window.open(sharerUrl, '_blank', 'noopener,noreferrer');
-    return;
-  }
+  const composerUrl =
+    buildLocalFacebookPageComposerUrl(post, webUrl) || buildFacebookPageShareUrl(post.id);
 
-  const canOpen = await Linking.canOpenURL(sharerUrl);
-  if (canOpen) {
-    await Linking.openURL(sharerUrl);
-    return;
-  }
+  await openExternalUrl(composerUrl);
+}
 
-  await shareViaNativeSheet(post);
+export async function shareFacebookLink(post: CommunityPostShareInput): Promise<void> {
+  await shareFacebookLinkToProfile(post);
 }
 
 async function downloadMediaForShare(
@@ -141,27 +304,17 @@ export async function shareMediaToSocialApps(
   post: CommunityPostShareInput,
   captionVariant: 'default' | 'instagram' = 'default',
 ): Promise<void> {
-  const { message, instagramCaption } = getPostShareUrls(post);
-  const caption = captionVariant === 'instagram' ? instagramCaption : message;
-
   if (Platform.OS === 'web') {
-    await Clipboard.setStringAsync(caption);
-    const opened = window.open(post.url, '_blank', 'noopener,noreferrer');
-    const platform = captionVariant === 'instagram' ? 'Instagram' : 'TikTok';
-    window.alert(
-      `${platform} on web:\n\n` +
-        '1. Caption copied to clipboard.\n' +
-        `2. Your ${post.type} opened in a new tab — download it.\n` +
-        `3. Open ${platform} and upload the file manually.\n` +
-        '4. Paste the caption before posting.\n\n' +
-        'For one-tap sharing, use the Musiki mobile app on iOS or Android.',
-    );
-    if (!opened) {
-      window.alert(`Could not open media. Download manually from:\n${post.url}`);
+    if (captionVariant === 'instagram') {
+      await shareToInstagramWeb(post);
+      return;
     }
+    await shareToTikTokWeb(post);
     return;
   }
 
+  const { message, instagramCaption } = getPostShareUrls(post);
+  const caption = captionVariant === 'instagram' ? instagramCaption : message;
   const localUri = await downloadMediaForShare(post);
 
   await Share.share({

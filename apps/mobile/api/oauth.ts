@@ -5,6 +5,7 @@ import { handleFacebookPermissions } from './lib/facebook-permissions';
 import { handleGoogleCallback } from './lib/google-callback';
 import { handleGoogleToken } from './lib/google-token';
 import { handleGoogleRefresh } from './lib/google-refresh';
+import { handleFacebookPageComposer } from './lib/facebook-page-composer';
 
 type OAuthHandler = (req: VercelRequest, res: VercelResponse) => Promise<void | VercelResponse>;
 
@@ -12,6 +13,7 @@ const handlers: Record<string, OAuthHandler> = {
   'facebook-callback': handleFacebookCallback,
   'facebook-token': handleFacebookToken,
   'facebook-permissions': handleFacebookPermissions,
+  'facebook-page-composer': handleFacebookPageComposer,
   'google-callback': handleGoogleCallback,
   'google-token': handleGoogleToken,
   'google-refresh': handleGoogleRefresh,

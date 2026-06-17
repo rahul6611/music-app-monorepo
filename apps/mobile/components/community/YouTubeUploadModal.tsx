@@ -44,27 +44,13 @@ export default function YouTubeUploadModal({
     if (visible && post) {
       setTitle(post.title || post.fileName?.split('.')?.[0] || 'Musiki Performance');
       setDescription(`${post.notes || ''}\n\nWatch full performances on Musiki!`);
-      checkAuthentication();
+      setUploadStatus('');
+      setLoading(false);
     } else {
       setUploadStatus('');
-    }
-  }, [visible, post]);
-
-  const checkAuthentication = async () => {
-    setLoading(true);
-    try {
-      const token = await getYouTubeToken();
-      if (!token) {
-        await loginWithYouTube();
-      }
-    } catch (error: any) {
-      console.error(error);
-      Alert.alert('YouTube Integration Error', error.message || 'Google Authentication failed.');
-      onClose();
-    } finally {
       setLoading(false);
     }
-  };
+  }, [visible, post]);
 
   const handleUpload = async () => {
     if (!title.trim()) {

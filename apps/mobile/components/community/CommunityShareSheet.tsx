@@ -11,7 +11,7 @@ import {
   Alert,
   useWindowDimensions,
 } from 'react-native';
-import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@music-app/store';
 import {
   CommunityPostShareInput,
@@ -23,12 +23,13 @@ import {
 import {
   copyCommunityPostLink,
   copyCommunityShareCaption,
-  shareFacebookLink,
+  shareFacebookLinkToPage,
+  shareFacebookLinkToProfile,
   shareMediaToSocialApps,
+  shareToYouTubeWeb,
   shareViaNativeSheet,
   showYouTubeUploadInfo,
 } from '../../utils/communityShareActions';
-import FacebookPublishModal from './FacebookPublishModal';
 import YouTubeUploadModal from './YouTubeUploadModal';
 
 interface CommunityShareSheetProps {
@@ -61,8 +62,8 @@ export default function CommunityShareSheet({
   const { width } = useWindowDimensions();
   const isWebDesktop = Platform.OS === 'web' && width >= 768;
   const [busyAction, setBusyAction] = useState<string | null>(null);
-  const [showFacebookModal, setShowFacebookModal] = useState(false);
   const [showYouTubeModal, setShowYouTubeModal] = useState(false);
+  const [showFacebookPicker, setShowFacebookPicker] = useState(false);
   const [activePost, setActivePost] = useState<CommunityPostShareInput | null>(null);
 
   useEffect(() => {
@@ -148,20 +149,8 @@ export default function CommunityShareSheet({
         id: 'facebook',
         label: 'Facebook',
         renderIcon: () => <Ionicons name="logo-facebook" size={28} color="#FFFFFF" />,
-        onPress: async () => {
-          await shareFacebookLink(resolvedPost);
-          onClose();
-        },
-      },
-      {
-        id: 'fb-pages',
-        label: 'FB Pages',
-        renderIcon: () => (
-          <MaterialCommunityIcons name="facebook-messenger" size={28} color="#FFFFFF" />
-        ),
         onPress: () => {
-          setShowFacebookModal(true);
-          onClose();
+          setShowFacebookPicker(true);
         },
       },
       {
@@ -175,7 +164,6 @@ export default function CommunityShareSheet({
             Platform.OS === 'web' ? window.alert(msg) : Alert.alert('Use Copy link', msg);
             return;
           }
-          await copyCommunityShareCaption(resolvedPost, 'instagram');
           await shareMediaToSocialApps(resolvedPost, 'instagram');
           onClose();
         },
@@ -191,7 +179,6 @@ export default function CommunityShareSheet({
             Platform.OS === 'web' ? window.alert(msg) : Alert.alert('Use Copy link', msg);
             return;
           }
-          await copyCommunityShareCaption(resolvedPost);
           await shareMediaToSocialApps(resolvedPost);
           onClose();
         },
@@ -201,9 +188,14 @@ export default function CommunityShareSheet({
         label: 'YouTube',
         disabled: !youtubeEnabled,
         renderIcon: () => <Ionicons name="logo-youtube" size={28} color="#FFFFFF" />,
-        onPress: () => {
+        onPress: async () => {
           if (!youtubeEnabled) {
             showYouTubeUploadInfo(resolvedPost);
+            return;
+          }
+          if (Platform.OS === 'web') {
+            await shareToYouTubeWeb(resolvedPost);
+            onClose();
             return;
           }
           setShowYouTubeModal(true);
@@ -285,12 +277,82 @@ export default function CommunityShareSheet({
         </Pressable>
       </Modal>
 
-      <FacebookPublishModal
-        visible={showFacebookModal}
-        onClose={() => setShowFacebookModal(false)}
-        post={resolvedPost}
-        theme={theme}
-      />
+      <Modal
+        visible={showFacebookPicker}
+        animationType="fade"
+        transparent
+        onRequestClose={() => setShowFacebookPicker(false)}
+      >
+        <Pressable style={styles.overlayCenter} onPress={() => setShowFacebookPicker(false)}>
+          <Pressable
+            style={[
+              styles.facebookPicker,
+              { backgroundColor: theme.background, borderColor: theme.border },
+              isWebDesktop && styles.sheetDesktop,
+            ]}
+            onPress={(e) => e.stopPropagation()}
+          >
+            <Text style={[styles.title, { color: theme.text }]}>Share on Facebook</Text>
+            <Text style={[styles.postLabel, { color: theme.textSecondary, marginBottom: 16 }]}>
+              Choose where to post your Musiki link
+            </Text>
+
+            <TouchableOpacity
+              style={[styles.facebookOption, { backgroundColor: theme.card, borderColor: theme.border }]}
+              disabled={!!busyAction}
+              onPress={() =>
+                runAction('facebook-profile', async () => {
+                  if (!resolvedPost) return;
+                  await shareFacebookLinkToProfile(resolvedPost);
+                  setShowFacebookPicker(false);
+                  onClose();
+                })
+              }
+            >
+              <View style={[styles.facebookOptionIcon, { backgroundColor: '#1877F2' }]}>
+                <Ionicons name="person" size={22} color="#FFFFFF" />
+              </View>
+              <View style={styles.facebookOptionText}>
+                <Text style={[styles.facebookOptionTitle, { color: theme.text }]}>My Profile</Text>
+                <Text style={[styles.facebookOptionSubtitle, { color: theme.textSecondary }]}>
+                  Opens Facebook share dialog for your personal timeline
+                </Text>
+              </View>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.facebookOption, { backgroundColor: theme.card, borderColor: theme.border }]}
+              disabled={!!busyAction}
+              onPress={() =>
+                runAction('facebook-page', async () => {
+                  if (!resolvedPost) return;
+                  await shareFacebookLinkToPage(resolvedPost);
+                  setShowFacebookPicker(false);
+                  onClose();
+                })
+              }
+            >
+              <View style={[styles.facebookOptionIcon, { backgroundColor: '#1877F2' }]}>
+                <Ionicons name="flag" size={22} color="#FFFFFF" />
+              </View>
+              <View style={styles.facebookOptionText}>
+                <Text style={[styles.facebookOptionTitle, { color: theme.text }]}>My Page</Text>
+                <Text style={[styles.facebookOptionSubtitle, { color: theme.textSecondary }]}>
+                  Opens Meta Business Suite with your Musiki link and video preview
+                </Text>
+              </View>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.facebookCancel, { borderColor: theme.border }]}
+              onPress={() => setShowFacebookPicker(false)}
+            >
+              <Text style={[styles.facebookCancelText, { color: theme.textSecondary }]}>Cancel</Text>
+            </TouchableOpacity>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
       <YouTubeUploadModal
         visible={showYouTubeModal}
         onClose={() => setShowYouTubeModal(false)}
@@ -317,7 +379,6 @@ function PlatformIconButton({
   const circleStyle = (() => {
     switch (action.id) {
       case 'facebook':
-      case 'fb-pages':
         return { backgroundColor: '#1877F2' };
       case 'instagram':
         return { backgroundColor: '#E4405F' };
@@ -355,6 +416,12 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.55)',
     justifyContent: 'flex-end',
+  },
+  overlayCenter: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   sheet: {
     borderTopLeftRadius: 24,
@@ -448,5 +515,52 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '700',
     textAlign: 'center',
+  },
+  facebookPicker: {
+    alignSelf: 'center',
+    width: '100%',
+    maxWidth: 420,
+    marginHorizontal: 20,
+    borderRadius: 20,
+    borderWidth: 1,
+    padding: 20,
+  },
+  facebookOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    padding: 14,
+    borderRadius: 14,
+    borderWidth: 1,
+    marginBottom: 10,
+  },
+  facebookOptionIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  facebookOptionText: {
+    flex: 1,
+    gap: 4,
+  },
+  facebookOptionTitle: {
+    fontSize: 15,
+    fontWeight: '800',
+  },
+  facebookOptionSubtitle: {
+    fontSize: 12,
+    lineHeight: 17,
+  },
+  facebookCancel: {
+    marginTop: 6,
+    paddingVertical: 12,
+    alignItems: 'center',
+    borderTopWidth: 1,
+  },
+  facebookCancelText: {
+    fontSize: 14,
+    fontWeight: '700',
   },
 });

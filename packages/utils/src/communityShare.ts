@@ -32,7 +32,17 @@ export function getCommunityPostDeepLink(postId: string): string {
 }
 
 export function getCommunityPostDisplayTitle(post: CommunityPostShareInput): string {
-  return post.title || post.fileName || 'Untitled Post';
+  const raw = post.title || post.fileName || 'Untitled Post';
+  return raw.replace(/\.(mp4|mov|webm|m4v|jpg|jpeg|png|webp|pdf|mp3|wav)$/i, '');
+}
+
+export function buildCommunityOgDescription(post: CommunityPostShareInput): string {
+  const title = getCommunityPostDisplayTitle(post);
+  const note = post.notes?.trim();
+  if (note) {
+    return `${note} — Watch "${title}" on Musiki.`;
+  }
+  return `Watch "${title}" on Musiki — tap to play the full video.`;
 }
 
 export function buildCommunityShareMessage(

@@ -1,4 +1,5 @@
 export * from './communityShare';
+export * from './cloudinaryShare';
 export * from './socialEmbed';
 export * from './categoriesConfig';
 export * from './libraryCategories';

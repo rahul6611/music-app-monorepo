@@ -25,6 +25,10 @@
       "destination": "/api/oauth?action=facebook-permissions"
     },
     {
+      "source": "/api/facebook-page-composer",
+      "destination": "/api/oauth?action=facebook-page-composer"
+    },
+    {
       "source": "/api/google-callback",
       "destination": "/api/oauth?action=google-callback"
     },

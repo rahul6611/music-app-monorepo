@@ -1,6 +1,10 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+    // Collection Group rule for notations (required for cross-collection queries)
+    match /{path=**}/notations/{notationId} {
+      allow read: if request.auth != null;
+    }
 
     // --- Core Helper Functions ---
     function isSignedIn() {
@@ -34,6 +38,12 @@ service cloud.firestore {
       return isSignedIn() && (request.auth.uid in (studentData.instructorIds || []));
     }
 
+    // Helper to check if only social fields are being updated
+    function isSocialUpdate() {
+      return request.resource.data.diff(resource.data).affectedKeys()
+        .hasOnly(['likes', 'likesCount', 'commentsCount', 'updatedAt']);
+    }
+
     // --- Users Collection ---
     match /users/{userId} {
       allow read: if isSignedIn()
@@ -44,10 +54,24 @@ service cloud.firestore {
       allow delete: if isSuperAdmin();
     }
 
-    // --- Music Data (Raags, Songs, Compositions) ---
+    // --- Articles ---
+    match /articles/{articleId} {
+      allow read: if isSignedIn() && (
+        resource.data.createdBy == request.auth.uid ||
+        isSuperAdmin() ||
+        isInstructor() ||
+        isStudentOf(resource.data.createdBy)
+      );
+      allow create: if isSignedIn() && request.resource.data.createdBy == request.auth.uid;
+      allow update: if isSignedIn() && resource.data.createdBy == request.auth.uid;
+      allow delete: if isSignedIn() && (
+        resource.data.createdBy == request.auth.uid || isSuperAdmin()
+      );
+    }
+
+    // --- Music Data (Raags, Songs, etc.) ---
     match /{collectionName}/{id} {
-      
-      allow read: if collectionName in ['raags', 'songs', 'laya', 'tihai', 'taals', 'compositions', 'westernItems'] && (
+      allow read: if collectionName in ['raags', 'songs', 'laya', 'tihai', 'taals', 'compositions', 'westernItems', 'articles'] && (
         isSignedIn() && (
           resource.data.isSystemDefault == true ||
           resource.data.createdBy == request.auth.uid ||
@@ -57,18 +81,16 @@ service cloud.firestore {
         )
       );
 
-      allow write: if collectionName in ['raags', 'songs', 'laya', 'tihai', 'taals', 'compositions', 'westernItems'] && (
+      allow write: if collectionName in ['raags', 'songs', 'laya', 'tihai', 'taals', 'compositions', 'westernItems', 'articles'] && (
         isSignedIn() && (
           isSuperAdmin() ||
           (request.method == 'create' && request.resource.data.createdBy == request.auth.uid) ||
-          (request.method == 'update' && resource.data.createdBy == request.auth.uid) ||
+          (request.method == 'update' && (resource.data.createdBy == request.auth.uid || isSocialUpdate())) ||
           (request.method == 'delete' && (resource.data.createdBy == request.auth.uid || isSuperAdmin()))
         )
       );
 
       // --- Sub-collections (uploads, media, notations, etc.) ---
-      
-      // Specific privacy for media items
       match /uploads/{uploadId} {
         allow read: if isSignedIn() && (
           !('uploadType' in resource.data) || resource.data.uploadType != 'Practice' || 
@@ -85,7 +107,6 @@ service cloud.firestore {
         allow write: if isSignedIn();
       }
 
-      // Recursive catch for Gat/Bandish media and other sub-collections
       match /{allOtherSubcollections=**} {
         allow read: if isSignedIn();
         allow write: if isSignedIn();
@@ -103,9 +124,34 @@ service cloud.firestore {
     match /communityPosts/{postId} {
       allow read: if isSignedIn();
       allow create: if isSignedIn() && request.resource.data.authorId == request.auth.uid;
-      allow update, delete: if isSignedIn() && (
-        resource.data.authorId == request.auth.uid || isSuperAdmin()
+      allow update: if isSignedIn() && (
+        resource.data.authorId == request.auth.uid || isSuperAdmin() || isSocialUpdate()
       );
+      allow delete: if isSignedIn() && (resource.data.authorId == request.auth.uid || isSuperAdmin());
+    }
+
+    // --- Performances ---
+    match /performances/{perfId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn();
+      allow update: if isSignedIn() && (
+        resource.data.authorId == request.auth.uid || isSuperAdmin() || isSocialUpdate()
+      );
+      allow delete: if isSignedIn() && (resource.data.authorId == request.auth.uid || isSuperAdmin());
+    }
+
+    // --- Community media feed (top-level /media — share links + Facebook previews) ---
+    match /media/{id} {
+      // Public get: Facebook/link scrapers can read a post by ID (not list all posts).
+      allow get: if true;
+      allow list: if isSignedIn();
+      allow create: if isSignedIn();
+      allow update: if isSignedIn() && (
+        isSuperAdmin()
+        || isSocialUpdate()
+        || resource.data.createdBy == request.auth.uid
+      );
+      allow delete: if isSuperAdmin() || resource.data.createdBy == request.auth.uid;
     }
 
     // --- Class Assignments & Submissions ---
@@ -126,14 +172,23 @@ service cloud.firestore {
 
     // --- Exercise & Other Collections ---
     match /exerciseCollections/{id} {
-      allow read: if isSignedIn() && (resource.data.isSystemDefault == true || resource.data.createdBy == request.auth.uid || isInstructor() || isSuperAdmin());
-      allow write: if isSignedIn() && (isSuperAdmin() || (request.method == 'create' && request.resource.data.createdBy == request.auth.uid) || (request.method == 'update' && resource.data.createdBy == request.auth.uid));
-    }
-
-    match /media/{id} {
-      allow read, create: if isSignedIn();
-      allow update: if isSignedIn() && (isSuperAdmin() || request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likes', 'likesCount', 'commentsCount']) || resource.data.createdBy == request.auth.uid);
-      allow delete: if isSuperAdmin() || resource.data.createdBy == request.auth.uid;
+      allow read: if isSignedIn() && (
+        resource.data.isSystemDefault == true
+        || resource.data.createdBy == request.auth.uid
+        || isInstructor()
+        || isSuperAdmin()
+        || isStudentOf(resource.data.createdBy)
+        || request.auth.uid in resource.data.get('editAccessStudentIds', [])
+      );
+      allow write: if isSignedIn() && (
+        isSuperAdmin()
+        || (request.method == 'create' && request.resource.data.createdBy == request.auth.uid)
+        || (request.method == 'update' && (
+          resource.data.createdBy == request.auth.uid
+          || isSocialUpdate()
+          || request.auth.uid in resource.data.get('editAccessStudentIds', [])
+        ))
+      );
     }
 
     match /bols/{id} {
