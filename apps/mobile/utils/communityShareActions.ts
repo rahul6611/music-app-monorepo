@@ -34,6 +34,10 @@ function showWebNotice(message: string): void {
   Alert.alert('Musiki', message);
 }
 
+export async function copyTextForShareWeb(text: string): Promise<void> {
+  return copyTextForShare(text);
+}
+
 async function copyTextForShare(text: string): Promise<void> {
   if (Platform.OS === 'web' && typeof document !== 'undefined') {
     try {
@@ -60,7 +64,7 @@ async function copyTextForShare(text: string): Promise<void> {
   await Clipboard.setStringAsync(text);
 }
 
-async function downloadMediaOnWeb(post: CommunityPostShareInput): Promise<void> {
+export async function downloadMediaOnWeb(post: CommunityPostShareInput): Promise<void> {
   if (Platform.OS !== 'web' || typeof document === 'undefined') {
     throw new Error('Web download is only available in the browser.');
   }
@@ -89,7 +93,6 @@ async function downloadMediaOnWeb(post: CommunityPostShareInput): Promise<void> 
     const anchor = document.createElement('a');
     anchor.href = post.url;
     anchor.download = filename;
-    anchor.target = '_blank';
     anchor.rel = 'noopener noreferrer';
     document.body.appendChild(anchor);
     anchor.click();
@@ -97,20 +100,18 @@ async function downloadMediaOnWeb(post: CommunityPostShareInput): Promise<void> 
   }
 }
 
-function openWebUrl(url: string): void {
+export function openPlatformInNewTab(url: string): void {
   if (Platform.OS === 'web' && typeof window !== 'undefined') {
-    const opened = window.open(url, '_blank', 'noopener,noreferrer');
-    if (!opened) {
-      window.location.assign(url);
-    }
+    window.open(url, '_blank', 'noopener,noreferrer');
     return;
   }
   Linking.openURL(url);
 }
 
+
 async function openExternalUrl(url: string): Promise<void> {
   if (Platform.OS === 'web') {
-    window.open(url, '_blank', 'noopener,noreferrer');
+    openPlatformInNewTab(url);
     return;
   }
 
@@ -225,40 +226,22 @@ export async function shareToInstagramWeb(post: CommunityPostShareInput): Promis
   const { instagramCaption } = getPostShareUrls(post);
   await copyTextForShare(instagramCaption);
   await downloadMediaOnWeb(post);
-  openWebUrl('https://www.instagram.com/');
-  showWebNotice(
-    'Instagram on web:\n\n' +
-      '1. Caption copied to clipboard.\n' +
-      '2. Your media file was downloaded.\n' +
-      '3. Instagram opened — click Create → upload the downloaded file → paste caption.',
-  );
+  openPlatformInNewTab('https://www.instagram.com/');
 }
 
 export async function shareToTikTokWeb(post: CommunityPostShareInput): Promise<void> {
   const { message } = getPostShareUrls(post);
   await copyTextForShare(message);
   await downloadMediaOnWeb(post);
-  openWebUrl('https://www.tiktok.com/upload');
-  showWebNotice(
-    'TikTok on web:\n\n' +
-      '1. Caption copied to clipboard.\n' +
-      '2. Your video was downloaded.\n' +
-      '3. TikTok upload opened — select the downloaded file → paste caption.',
-  );
+  openPlatformInNewTab('https://www.tiktok.com/upload');
 }
 
 export async function shareToYouTubeWeb(post: CommunityPostShareInput): Promise<void> {
   const title = getCommunityPostDisplayTitle(post);
-  const description = `${post.notes?.trim() ? `${post.notes.trim()}\n\n` : ''}Shared from Musiki Community.`;
+  const description = `${post.notes?.trim() ? `${post.notes.trim()}\n\n` : ''}Watch on Musiki:\n${getPostShareUrls(post).webUrl}`;
   await copyTextForShare(`Title: ${title}\n\nDescription:\n${description}`);
   await downloadMediaOnWeb(post);
-  openWebUrl('https://studio.youtube.com/');
-  showWebNotice(
-    'YouTube on web:\n\n' +
-      '1. Title + description copied to clipboard.\n' +
-      '2. Your video was downloaded.\n' +
-      '3. YouTube Studio opened — click Create → Upload → select the file → paste details.',
-  );
+  openPlatformInNewTab('https://studio.youtube.com/');
 }
 
 /** Opens Facebook sharer for personal profile/timeline. */

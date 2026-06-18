@@ -26,10 +26,10 @@ import {
   shareFacebookLinkToPage,
   shareFacebookLinkToProfile,
   shareMediaToSocialApps,
-  shareToYouTubeWeb,
   shareViaNativeSheet,
   showYouTubeUploadInfo,
 } from '../../utils/communityShareActions';
+import SocialShareGuideModal, { SocialGuidePlatform } from './SocialShareGuideModal';
 import YouTubeUploadModal from './YouTubeUploadModal';
 
 interface CommunityShareSheetProps {
@@ -64,13 +64,21 @@ export default function CommunityShareSheet({
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const [showYouTubeModal, setShowYouTubeModal] = useState(false);
   const [showFacebookPicker, setShowFacebookPicker] = useState(false);
+  const [socialGuide, setSocialGuide] = useState<SocialGuidePlatform | null>(null);
   const [activePost, setActivePost] = useState<CommunityPostShareInput | null>(null);
+  const [copiedAction, setCopiedAction] = useState<'copy-link' | 'copy-caption' | null>(null);
 
   useEffect(() => {
     if (post) {
       setActivePost(post);
     }
   }, [post]);
+
+  useEffect(() => {
+    if (!visible) {
+      setCopiedAction(null);
+    }
+  }, [visible]);
 
   const resolvedPost = post ?? activePost;
   const postLabel = resolvedPost?.fileName || resolvedPost?.title || 'Community post';
@@ -102,12 +110,7 @@ export default function CommunityShareSheet({
         icon: 'link-outline',
         onPress: async () => {
           await copyCommunityPostLink(resolvedPost);
-          if (Platform.OS === 'web') {
-            window.alert('Musiki post link copied to clipboard.');
-          } else {
-            Alert.alert('Copied', 'Musiki post link copied to clipboard.');
-          }
-          onClose();
+          setCopiedAction('copy-link');
         },
       },
       {
@@ -116,12 +119,7 @@ export default function CommunityShareSheet({
         icon: 'copy-outline',
         onPress: async () => {
           await copyCommunityShareCaption(resolvedPost);
-          if (Platform.OS === 'web') {
-            window.alert('Caption copied. Paste it when you post.');
-          } else {
-            Alert.alert('Copied', 'Caption copied. Paste it when you post.');
-          }
-          onClose();
+          setCopiedAction('copy-caption');
         },
       },
       {
@@ -158,14 +156,21 @@ export default function CommunityShareSheet({
         label: 'Instagram',
         disabled: !instagramEnabled,
         renderIcon: () => <Ionicons name="logo-instagram" size={28} color="#FFFFFF" />,
-        onPress: async () => {
+        onPress: () => {
           if (isEmbed) {
             const msg = 'Embedded social links cannot be re-uploaded. Copy the Musiki link instead.';
             Platform.OS === 'web' ? window.alert(msg) : Alert.alert('Use Copy link', msg);
             return;
           }
-          await shareMediaToSocialApps(resolvedPost, 'instagram');
-          onClose();
+          if (Platform.OS === 'web') {
+            setSocialGuide('instagram');
+            onClose();
+            return;
+          }
+          runAction('instagram', async () => {
+            await shareMediaToSocialApps(resolvedPost, 'instagram');
+            onClose();
+          });
         },
       },
       {
@@ -173,14 +178,21 @@ export default function CommunityShareSheet({
         label: 'TikTok',
         disabled: !tiktokEnabled,
         renderIcon: () => <Ionicons name="logo-tiktok" size={28} color="#FFFFFF" />,
-        onPress: async () => {
+        onPress: () => {
           if (isEmbed) {
             const msg = 'Embedded links cannot be shared as TikTok videos.';
             Platform.OS === 'web' ? window.alert(msg) : Alert.alert('Use Copy link', msg);
             return;
           }
-          await shareMediaToSocialApps(resolvedPost);
-          onClose();
+          if (Platform.OS === 'web') {
+            setSocialGuide('tiktok');
+            onClose();
+            return;
+          }
+          runAction('tiktok', async () => {
+            await shareMediaToSocialApps(resolvedPost);
+            onClose();
+          });
         },
       },
       {
@@ -188,13 +200,13 @@ export default function CommunityShareSheet({
         label: 'YouTube',
         disabled: !youtubeEnabled,
         renderIcon: () => <Ionicons name="logo-youtube" size={28} color="#FFFFFF" />,
-        onPress: async () => {
+        onPress: () => {
           if (!youtubeEnabled) {
             showYouTubeUploadInfo(resolvedPost);
             return;
           }
           if (Platform.OS === 'web') {
-            await shareToYouTubeWeb(resolvedPost);
+            setSocialGuide('youtube');
             onClose();
             return;
           }
@@ -235,28 +247,45 @@ export default function CommunityShareSheet({
 
             <Text style={[styles.sectionLabel, { color: theme.textSecondary }]}>Everyone</Text>
             <View style={styles.everyoneRow}>
-              {everyoneActions.map((action) => (
-                <TouchableOpacity
-                  key={action.id}
-                  style={[
-                    styles.everyoneCard,
-                    { backgroundColor: theme.card, borderColor: theme.border },
-                  ]}
-                  disabled={busyAction === action.id}
-                  onPress={() => runAction(action.id, action.onPress)}
-                >
-                  {busyAction === action.id ? (
-                    <ActivityIndicator size="small" color={theme.primary} />
-                  ) : (
-                    <>
-                      <View style={[styles.everyoneIconWrap, { backgroundColor: theme.primarySoft }]}>
-                        <Ionicons name={action.icon} size={24} color={theme.primary} />
-                      </View>
-                      <Text style={[styles.everyoneLabel, { color: theme.text }]}>{action.label}</Text>
-                    </>
-                  )}
-                </TouchableOpacity>
-              ))}
+              {everyoneActions.map((action) => {
+                const isCopied =
+                  (action.id === 'copy-link' && copiedAction === 'copy-link') ||
+                  (action.id === 'copy-caption' && copiedAction === 'copy-caption');
+
+                return (
+                  <TouchableOpacity
+                    key={action.id}
+                    style={[
+                      styles.everyoneCard,
+                      {
+                        backgroundColor: theme.card,
+                        borderColor: isCopied ? '#10B981' : theme.border,
+                      },
+                      isCopied && styles.everyoneCardCopied,
+                    ]}
+                    disabled={busyAction === action.id}
+                    onPress={() => runAction(action.id, action.onPress)}
+                  >
+                    {busyAction === action.id ? (
+                      <ActivityIndicator size="small" color={theme.primary} />
+                    ) : isCopied ? (
+                      <>
+                        <View style={[styles.everyoneIconWrap, { backgroundColor: 'rgba(16,185,129,0.15)' }]}>
+                          <Ionicons name="checkmark-circle" size={24} color="#10B981" />
+                        </View>
+                        <Text style={[styles.everyoneLabel, { color: '#10B981' }]}>Copied!</Text>
+                      </>
+                    ) : (
+                      <>
+                        <View style={[styles.everyoneIconWrap, { backgroundColor: theme.primarySoft }]}>
+                          <Ionicons name={action.icon} size={24} color={theme.primary} />
+                        </View>
+                        <Text style={[styles.everyoneLabel, { color: theme.text }]}>{action.label}</Text>
+                      </>
+                    )}
+                  </TouchableOpacity>
+                );
+              })}
             </View>
 
             <Text style={[styles.sectionLabel, { color: theme.textSecondary, marginTop: 18 }]}>
@@ -353,6 +382,13 @@ export default function CommunityShareSheet({
         </Pressable>
       </Modal>
 
+      <SocialShareGuideModal
+        visible={!!socialGuide}
+        platform={socialGuide || 'instagram'}
+        onClose={() => setSocialGuide(null)}
+        post={resolvedPost}
+        theme={theme}
+      />
       <YouTubeUploadModal
         visible={showYouTubeModal}
         onClose={() => setShowYouTubeModal(false)}
@@ -480,6 +516,9 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     paddingHorizontal: 8,
     gap: 10,
+  },
+  everyoneCardCopied: {
+    borderWidth: 2,
   },
   everyoneIconWrap: {
     width: 44,
