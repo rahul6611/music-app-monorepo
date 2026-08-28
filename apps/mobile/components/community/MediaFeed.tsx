@@ -325,6 +325,7 @@ function MediaCard({ item, theme }: { item: any; theme: any }) {
             postId={item.id} 
             initialChapters={item.chapters}
             canEdit={user?.uid === item.createdBy}
+            showSkipControls
             onChaptersUpdate={(newChapters) => {
             }}
           />

@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { 
   View, 
   Text, 
@@ -9,13 +9,18 @@ import {
   Alert,
   Modal,
   Platform,
-  ActivityIndicator
+  ActivityIndicator,
+  Pressable,
 } from 'react-native';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import { Ionicons, Feather, MaterialIcons } from '@expo/vector-icons';
 import { useTheme } from '@music-app/store';
 import { VideoChapter, updateChapters } from '@music-app/firebase';
 import { useAuthStore } from '@music-app/store';
+
+const SKIP_SECONDS = 3;
+const DOUBLE_TAP_DELAY_MS = 350;
+const CONTROL_BAR_EXCLUDE_RATIO = 0.82;
 
 interface VideoPlayerWithChaptersProps {
   url: string;
@@ -24,6 +29,7 @@ interface VideoPlayerWithChaptersProps {
   canEdit?: boolean;
   updateOptions?: { collectionName?: string; parentId?: string };
   onChaptersUpdate?: (chapters: VideoChapter[]) => void;
+  showSkipControls?: boolean;
 }
 
 export default function VideoPlayerWithChapters({ 
@@ -32,17 +38,21 @@ export default function VideoPlayerWithChapters({
   initialChapters, 
   canEdit = false,
   updateOptions,
-  onChaptersUpdate
+  onChaptersUpdate,
+  showSkipControls = false,
 }: VideoPlayerWithChaptersProps) {
   const theme = useTheme();
   const { user } = useAuthStore();
   const player = useVideoPlayer(url);
+  const videoViewRef = useRef<any>(null);
+  const lastTapRef = useRef<{ side: 'left' | 'right'; time: number } | null>(null);
+  const skipFeedbackTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [chapters, setChapters] = useState<VideoChapter[]>(initialChapters || []);
   const [showAddModal, setShowAddModal] = useState(false);
   const [newChapterTitle, setNewChapterTitle] = useState('');
   const [newChapterTime, setNewChapterTime] = useState('');
   const [isSaving, setIsSaving] = useState(false);
-
+  const [skipFeedback, setSkipFeedback] = useState<'left' | 'right' | null>(null);
 
   useEffect(() => {
     if (initialChapters) {
@@ -50,9 +60,126 @@ export default function VideoPlayerWithChapters({
     }
   }, [initialChapters]);
 
+  useEffect(() => {
+    return () => {
+      if (skipFeedbackTimeoutRef.current) {
+        clearTimeout(skipFeedbackTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  const getVideoElement = useCallback((): HTMLVideoElement | null => {
+    const nativeRef = videoViewRef.current?.nativeRef;
+    return nativeRef?.current ?? null;
+  }, []);
+
+  const seekTo = useCallback((targetSeconds: number, resumeIfPlaying = true) => {
+    const videoEl = getVideoElement();
+    const duration = videoEl?.duration ?? player.duration;
+    const clampedTime = Math.max(
+      0,
+      Number.isFinite(duration) && duration > 0
+        ? Math.min(duration, targetSeconds)
+        : targetSeconds
+    );
+
+    if (videoEl) {
+      const wasPlaying = !videoEl.paused;
+      videoEl.currentTime = clampedTime;
+      if (resumeIfPlaying && wasPlaying) {
+        void videoEl.play().catch(() => {});
+      }
+      return;
+    }
+
+    const wasPlaying = player.playing;
+    player.currentTime = clampedTime;
+    if (resumeIfPlaying && wasPlaying) {
+      player.play();
+    }
+  }, [getVideoElement, player]);
+
+  const showSkipIndicator = useCallback((side: 'left' | 'right') => {
+    if (skipFeedbackTimeoutRef.current) {
+      clearTimeout(skipFeedbackTimeoutRef.current);
+    }
+    setSkipFeedback(side);
+    skipFeedbackTimeoutRef.current = setTimeout(() => setSkipFeedback(null), 700);
+  }, []);
+
+  const handleSkip = useCallback((seconds: number) => {
+    const videoEl = getVideoElement();
+    const currentTime = videoEl?.currentTime ?? player.currentTime;
+    seekTo(currentTime + seconds);
+  }, [getVideoElement, player, seekTo]);
+
+  const handleDoubleTapSkip = useCallback((side: 'left' | 'right') => {
+    handleSkip(side === 'left' ? -SKIP_SECONDS : SKIP_SECONDS);
+    showSkipIndicator(side);
+  }, [handleSkip, showSkipIndicator]);
+
+  const handleSkipZonePress = useCallback((side: 'left' | 'right') => {
+    const now = Date.now();
+    const lastTap = lastTapRef.current;
+
+    if (lastTap?.side === side && now - lastTap.time < DOUBLE_TAP_DELAY_MS) {
+      handleDoubleTapSkip(side);
+      lastTapRef.current = null;
+    } else {
+      lastTapRef.current = { side, time: now };
+    }
+  }, [handleDoubleTapSkip]);
+
+  useEffect(() => {
+    if (!showSkipControls || Platform.OS !== 'web') return;
+
+    let cleanup: (() => void) | undefined;
+    let retryTimeout: ReturnType<typeof setTimeout> | undefined;
+    let attempts = 0;
+
+    const attachDoubleClick = () => {
+      const videoEl = getVideoElement();
+      if (!videoEl) {
+        if (attempts < 10) {
+          attempts += 1;
+          retryTimeout = setTimeout(attachDoubleClick, 100);
+        }
+        return;
+      }
+
+      const handleDblClick = (e: MouseEvent) => {
+        const rect = videoEl.getBoundingClientRect();
+        if (!rect.width || !rect.height) return;
+
+        const x = (e.clientX - rect.left) / rect.width;
+        const y = (e.clientY - rect.top) / rect.height;
+        if (y > CONTROL_BAR_EXCLUDE_RATIO) return;
+
+        if (x < 0.4) {
+          e.preventDefault();
+          e.stopPropagation();
+          handleDoubleTapSkip('left');
+        } else if (x > 0.6) {
+          e.preventDefault();
+          e.stopPropagation();
+          handleDoubleTapSkip('right');
+        }
+      };
+
+      videoEl.addEventListener('dblclick', handleDblClick);
+      cleanup = () => videoEl.removeEventListener('dblclick', handleDblClick);
+    };
+
+    attachDoubleClick();
+
+    return () => {
+      if (retryTimeout) clearTimeout(retryTimeout);
+      cleanup?.();
+    };
+  }, [showSkipControls, url, getVideoElement, handleDoubleTapSkip]);
+
   const handleJumpToChapter = (timestamp: number) => {
-    player.seekBy(timestamp - player.currentTime);
-    player.play();
+    seekTo(timestamp);
   };
 
   const handleAddCurrentTime = () => {
@@ -131,11 +258,69 @@ export default function VideoPlayerWithChapters({
 
   return (
     <View style={styles.container}>
-      <VideoView 
-        player={player} 
-        style={styles.video} 
-        nativeControls 
-      />
+      <View style={styles.videoWrapper}>
+        <VideoView 
+          ref={videoViewRef}
+          player={player} 
+          style={styles.video} 
+          nativeControls 
+        />
+
+        {showSkipControls && Platform.OS !== 'web' && (
+          <>
+            <Pressable
+              style={styles.skipZoneLeft}
+              onPress={() => handleSkipZonePress('left')}
+            />
+            <Pressable
+              style={styles.skipZoneRight}
+              onPress={() => handleSkipZonePress('right')}
+            />
+          </>
+        )}
+
+        {skipFeedback && (
+          <View
+            style={[
+              styles.skipIndicator,
+              skipFeedback === 'left' ? styles.skipIndicatorLeft : styles.skipIndicatorRight,
+            ]}
+            pointerEvents="none"
+          >
+            <Ionicons
+              name={skipFeedback === 'left' ? 'play-back' : 'play-forward'}
+              size={32}
+              color="#FFF"
+            />
+            <Text style={styles.skipIndicatorText}>{SKIP_SECONDS}</Text>
+          </View>
+        )}
+      </View>
+
+      {showSkipControls && (
+        <View style={styles.skipButtonRow}>
+          <Pressable
+            style={[styles.skipButton, { backgroundColor: theme.card, borderColor: theme.border }]}
+            onPress={(e) => {
+              e?.stopPropagation?.();
+              handleSkip(-SKIP_SECONDS);
+            }}
+          >
+            <Ionicons name="play-back" size={18} color={theme.primary} />
+            <Text style={[styles.skipButtonText, { color: theme.text }]}>{SKIP_SECONDS}s</Text>
+          </Pressable>
+          <Pressable
+            style={[styles.skipButton, { backgroundColor: theme.card, borderColor: theme.border }]}
+            onPress={(e) => {
+              e?.stopPropagation?.();
+              handleSkip(SKIP_SECONDS);
+            }}
+          >
+            <Text style={[styles.skipButtonText, { color: theme.text }]}>{SKIP_SECONDS}s</Text>
+            <Ionicons name="play-forward" size={18} color={theme.primary} />
+          </Pressable>
+        </View>
+      )}
 
       <View style={styles.chaptersContainer}>
         <View style={styles.chaptersHeader}>
@@ -259,10 +444,77 @@ const styles = StyleSheet.create({
   container: {
     width: '100%',
   },
-  video: {
+  videoWrapper: {
+    position: 'relative',
     width: '100%',
     aspectRatio: 16 / 9,
     backgroundColor: '#000',
+  },
+  video: {
+    width: '100%',
+    height: '100%',
+    backgroundColor: '#000',
+  },
+  skipZoneLeft: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 48,
+    width: '40%',
+    zIndex: 10,
+  },
+  skipZoneRight: {
+    position: 'absolute',
+    right: 0,
+    top: 0,
+    bottom: 48,
+    width: '40%',
+    zIndex: 10,
+  },
+  skipIndicator: {
+    position: 'absolute',
+    top: '42%',
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: 'rgba(0,0,0,0.65)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 11,
+  },
+  skipIndicatorLeft: {
+    left: '12%',
+  },
+  skipIndicatorRight: {
+    right: '12%',
+  },
+  skipIndicatorText: {
+    color: '#FFF',
+    fontSize: 14,
+    fontWeight: '800',
+    marginTop: -4,
+  },
+  skipButtonRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 15,
+    paddingVertical: 10,
+    gap: 16,
+  },
+  skipButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1,
+    ...(Platform.OS === 'web' ? { cursor: 'pointer' as const } : {}),
+  },
+  skipButtonText: {
+    fontSize: 13,
+    fontWeight: '800',
   },
   chaptersContainer: {
     padding: 15,

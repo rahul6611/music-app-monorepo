@@ -53,3 +53,4 @@ Thumbs.db
 /android
 
 !.github/workflows/build-mac.yml
+.vercel

@@ -81,7 +81,17 @@
           "microphonePermission": "Allow this app to access your microphone to record video."
         }
       ],
-      "@react-native-community/datetimepicker"
+      "@react-native-community/datetimepicker",
+      [
+        "react-native-audio-api",
+        {
+          "iosMicrophonePermission": "Allow this app to access your microphone for pitch practice.",
+          "androidPermissions": [
+            "android.permission.RECORD_AUDIO",
+            "android.permission.MODIFY_AUDIO_SETTINGS"
+          ]
+        }
+      ]
     ],
     "runtimeVersion": {
       "policy": "appVersion"

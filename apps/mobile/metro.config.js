@@ -37,6 +37,14 @@ config.resolver.nodeModulesPaths = [
   path.resolve(workspaceRoot, 'node_modules'),
 ];
 
+// 3. Map workspace packages so Metro can resolve @music-app/* packages
+config.resolver.extraNodeModules = {
+  '@music-app/firebase': path.resolve(workspaceRoot, 'packages/firebase'),
+  '@music-app/store': path.resolve(workspaceRoot, 'packages/store'),
+  '@music-app/types': path.resolve(workspaceRoot, 'packages/types'),
+  '@music-app/utils': path.resolve(workspaceRoot, 'packages/utils'),
+};
+
 // Wrap with NativeWind — this is REQUIRED for NativeWind v4 to process CSS
 module.exports = withNativeWind(config, { 
   input: './global.css',

@@ -4,3 +4,4 @@ export * from './taalStructure';
 export * from './notationConstants';
 export * from './notationParser';
 export * from './AutoPatternGeneration';
+export * from './pitchAnalysis';

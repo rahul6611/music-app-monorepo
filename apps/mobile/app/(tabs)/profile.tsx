@@ -1,4 +1,5 @@
 import { View, Text, ScrollView, TouchableOpacity, Alert, ActivityIndicator, StyleSheet, Switch, Platform, Modal, useWindowDimensions } from 'react-native';
+import { useRouter } from 'expo-router';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { Feather } from '@expo/vector-icons';
 import { auth, db } from '@music-app/firebase';
@@ -25,6 +26,7 @@ import {
 } from '@music-app/firebase';
 
 export default function Profile() {
+  const router = useRouter();
   const { user } = useAuthStore();
   const theme = useTheme();
   const { width: windowWidth } = useWindowDimensions();
@@ -383,6 +385,17 @@ export default function Profile() {
               </TouchableOpacity>
             ))}
           </View>
+        </View>
+
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Practice Tools</Text>
+          <TouchableOpacity
+            onPress={() => router.push('/practice/pitch')}
+            style={styles.timeSelector}
+          >
+            <Feather name="activity" size={14} color={theme.primary} />
+            <Text style={styles.reminderTimeText}>Pitch monitor (Riyaz-style prototype)</Text>
+          </TouchableOpacity>
         </View>
 
         <View style={styles.section}>
