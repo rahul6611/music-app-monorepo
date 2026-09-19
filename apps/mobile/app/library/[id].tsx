@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
   View, 
   Text, 
@@ -15,7 +15,7 @@ import {
   TouchableWithoutFeedback,
   Linking
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { Feather, Ionicons, MaterialCommunityIcons, MaterialIcons } from '@expo/vector-icons';
 import Constants from 'expo-constants';
 import { useRouter, useLocalSearchParams } from 'expo-router';
@@ -43,70 +43,15 @@ import AddCompositionModal from '../../components/library/AddCompositionModal';
 import AddMediaModal from '../../components/library/AddMediaModal';
 import SwarDetailValue from '../../components/library/SwarDetailValue';
 import NotationTableEnhanced from '../../components/notation/NotationTableEnhanced';
-import { parseNestedMusicInput } from '@music-app/utils';
+import NotationViewHeader from '../../components/notation/NotationViewHeader';
+import { buildNotationTableSections } from '@music-app/utils';
 import { useCameraStore } from '@music-app/store';
 import { processCapturedMedia, VideoChapter } from '@music-app/firebase';
 import VideoPlayerWithChapters from '../../components/video/VideoPlayerWithChapters';
 
 function buildSectionsFromNotationRows(notationRows: any[], fallbackSwarText?: string, beatsPerCycle: number = 16): any[] {
-  if (!notationRows?.length) {
-    if (fallbackSwarText) {
-      const parsedCells = parseNestedMusicInput(fallbackSwarText);
-      return [{
-        label: 'Sthayi',
-        rows: [{
-          key: 'row-0',
-          cells: parsedCells.map(c => ({ cells: c.data }))
-        }]
-      }];
-    }
-    return [];
-  }
-
-  const sections: any[] = [];
-  let currentSection: { label: string; rows: any[] } | null = null;
-
-  notationRows.forEach((row, idx) => {
-    const label = row.sectionLabel || 'Sthayi';
-    if (!currentSection || currentSection.label !== label) {
-      currentSection = { label, rows: [] };
-      sections.push(currentSection);
-    }
-
-    let cells: any[] = [];
-    
-    if (row.entries && Array.isArray(row.entries) && row.entries.length > 0) {
-      const beatMap: Record<number, any[]> = {};
-      row.entries.forEach((entry: any) => {
-        const beat = entry.beat || 1;
-        if (!beatMap[beat]) beatMap[beat] = [];
-        const content = entry.swar || entry.note || entry.content || "";
-        if (content) {
-          const parsed = parseNestedMusicInput(content);
-          if (parsed.length > 0) {
-            beatMap[beat].push(...parsed[0].data);
-          } else {
-            beatMap[beat].push(content);
-          }
-        }
-      });
-      
-      for (let i = 1; i <= beatsPerCycle; i++) {
-        cells.push({ cells: beatMap[i] || [] });
-      }
-    } else {
-      const content = row.notationContent || row.swarText || row.swar || row.notes || row.content || "";
-      const parsedCells = parseNestedMusicInput(content);
-      cells = parsedCells.map(c => ({ cells: c.data }));
-    }
-
-    currentSection.rows.push({
-      key: `row-${idx}`,
-      cells: cells
-    });
-  });
-
-  return sections;
+  void beatsPerCycle;
+  return buildNotationTableSections(notationRows, fallbackSwarText);
 }
 
 const { width } = Dimensions.get('window');
@@ -136,6 +81,16 @@ export default function ItemDetailScreen() {
   const [selectedNotation, setSelectedNotation] = useState<any>(null);
   const [selectedItem, setSelectedItem] = useState<GatBandishEntry | null>(null);
   const [loadingNotation, setLoadingNotation] = useState(false);
+  const notationRequest = useRef(0);
+  const notationSections = useMemo(() => buildSectionsFromNotationRows(
+    selectedNotation?.notationData?.notationRows || [],
+    selectedNotation?.notationData?.swarText || selectedNotation?.notationData?.notation,
+  ), [selectedNotation]);
+  const closeNotation = () => {
+    notationRequest.current += 1;
+    setShowNotationModal(false);
+    setLoadingNotation(false);
+  };
   const [playingMedia, setPlayingMedia] = useState<any>(null);
   const cameraStore = useCameraStore();
 
@@ -209,7 +164,7 @@ export default function ItemDetailScreen() {
     }
   }, [cameraStore.capturedUri]);
 
-  const [expandedCompId, setExpandedCompId] = useState<string | null>(null);
+  const [compositionMenuItem, setCompositionMenuItem] = useState<GatBandishEntry | null>(null);
 
   if (loading) {
     return (
@@ -229,21 +184,27 @@ export default function ItemDetailScreen() {
 
   const handleShowNotation = async (item: GatBandishEntry) => {
     if (!item.id) return;
+    const request = ++notationRequest.current;
     setSelectedItem(item);
+    setSelectedNotation(null);
     setLoadingNotation(true);
+    setShowNotationModal(true);
     try {
       const result = await getNotationByCompositionEntryId(item.id, params.id as string, collectionName);
+      if (request !== notationRequest.current) return;
       if (result && result.notationEntry) {
         setSelectedNotation(result.notationEntry);
-        setShowNotationModal(true);
       } else {
+        setShowNotationModal(false);
         Alert.alert("No Notation", "No notation has been added for this composition yet.");
       }
     } catch (error) {
+      if (request !== notationRequest.current) return;
+      setShowNotationModal(false);
       console.error("Error fetching notation:", error);
       Alert.alert("Error", "Failed to load notation data");
     } finally {
-      setLoadingNotation(false);
+      if (request === notationRequest.current) setLoadingNotation(false);
     }
   };
 
@@ -411,14 +372,9 @@ export default function ItemDetailScreen() {
   };
 
   const renderCompositionItem = ({ item, index }: { item: GatBandishEntry; index: number }) => {
-    const isExpanded = expandedCompId === item.id;
-    
     return (
       <View style={[styles.compositionCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
-        <TouchableOpacity 
-          style={styles.compHeader}
-          onPress={() => setExpandedCompId(isExpanded ? null : item.id!)}
-        >
+        <View style={styles.compHeader}>
           <View style={styles.compLeft}>
             <View style={[styles.compNumber, { backgroundColor: theme.primarySoft }]}>
               <Text style={[styles.compNumberText, { color: theme.primary }]}>{index + 1}</Text>
@@ -430,47 +386,15 @@ export default function ItemDetailScreen() {
               </Text>
             </View>
           </View>
-          <Feather name={isExpanded ? "chevron-up" : "chevron-down"} size={20} color={theme.textSecondary} />
-        </TouchableOpacity>
-
-        {isExpanded && (
-          <View style={styles.compExpanded}>
-            <View style={styles.compActions}>
-              <TouchableOpacity 
-                style={[styles.compActionBtn, { backgroundColor: theme.primarySoft }]}
-                onPress={() => handleShowNotation(item)}
-              >
-                {loadingNotation ? (
-                  <ActivityIndicator size="small" color={theme.primary} />
-                ) : (
-                  <>
-                    <MaterialCommunityIcons name="music-clef-treble" size={18} color={theme.primary} />
-                    <Text style={[styles.compActionText, { color: theme.primary }]}>Notation</Text>
-                  </>
-                )}
-              </TouchableOpacity>
-              
-              <TouchableOpacity 
-                style={[styles.compActionBtn, { backgroundColor: 'rgba(0,0,0,0.05)' }]}
-                onPress={() => {
-                   setEditingComposition(item);
-                   setShowAddCompModal(true);
-                }}
-              >
-                <Feather name="edit-2" size={18} color={theme.text} />
-                <Text style={[styles.compActionText, { color: theme.text }]}>Edit</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity 
-                style={[styles.compActionBtn, { backgroundColor: 'rgba(239, 68, 68, 0.1)' }]}
-                onPress={() => handleDeleteComposition(item)}
-              >
-                <Feather name="trash-2" size={18} color={theme.danger} />
-                <Text style={[styles.compActionText, { color: theme.danger }]}>Delete</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        )}
+          <TouchableOpacity
+            style={styles.compositionMenuButton}
+            onPress={() => setCompositionMenuItem(item)}
+            accessibilityRole="button"
+            accessibilityLabel={`More options for ${item.name}`}
+          >
+            <Feather name="more-vertical" size={22} color={theme.textSecondary} />
+          </TouchableOpacity>
+        </View>
       </View>
     );
   };
@@ -604,6 +528,86 @@ export default function ItemDetailScreen() {
         itemTitle={raagData.name}
       />
 
+      <Modal
+        visible={!!compositionMenuItem}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setCompositionMenuItem(null)}
+      >
+        <TouchableWithoutFeedback onPress={() => setCompositionMenuItem(null)}>
+          <View style={styles.compositionMenuOverlay}>
+            <View style={[styles.compositionActionMenu, { backgroundColor: theme.card, borderColor: theme.border }]}>
+              <Text style={[styles.compositionMenuTitle, { color: theme.text }]} numberOfLines={1}>
+                {compositionMenuItem?.name}
+              </Text>
+
+              <TouchableOpacity
+                style={styles.dropdownItem}
+                disabled={loadingNotation}
+                onPress={() => {
+                  const item = compositionMenuItem;
+                  setCompositionMenuItem(null);
+                  if (item) handleShowNotation(item);
+                }}
+              >
+                {loadingNotation
+                  ? <ActivityIndicator size="small" color={theme.primary} />
+                  : <MaterialCommunityIcons name="music-clef-treble" size={19} color={theme.primary} />}
+                <Text style={[styles.dropdownText, { color: theme.text }]}>View Notation</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.dropdownItem}
+                onPress={() => {
+                  const item = compositionMenuItem;
+                  setCompositionMenuItem(null);
+                  if (!item) return;
+                  router.push({
+                    pathname: '/notation/add',
+                    params: {
+                      raagId: params.id as string,
+                      collectionName,
+                      compositionEntryId: item.id!,
+                      taalName: item.taal || 'Teental',
+                      beats: String((item as any).beats || 16),
+                    },
+                  });
+                }}
+              >
+                <Feather name="plus-circle" size={19} color={theme.primary} />
+                <Text style={[styles.dropdownText, { color: theme.text }]}>Add Notation</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.dropdownItem}
+                onPress={() => {
+                  const item = compositionMenuItem;
+                  setCompositionMenuItem(null);
+                  if (!item) return;
+                  setEditingComposition(item);
+                  setShowAddCompModal(true);
+                }}
+              >
+                <Feather name="edit-2" size={19} color={theme.text} />
+                <Text style={[styles.dropdownText, { color: theme.text }]}>Edit</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.dropdownItem, { borderBottomWidth: 0 }]}
+                onPress={() => {
+                  const item = compositionMenuItem;
+                  setCompositionMenuItem(null);
+                  if (item) handleDeleteComposition(item);
+                }}
+              >
+                <Feather name="trash-2" size={19} color={theme.danger} />
+                <Text style={[styles.dropdownText, { color: theme.danger }]}>Delete</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </TouchableWithoutFeedback>
+      </Modal>
+
       <View style={styles.tabBar}>
         <TouchableOpacity 
           onPress={() => setActiveTab('notation')}
@@ -627,7 +631,7 @@ export default function ItemDetailScreen() {
         <View style={styles.content}>
           <View style={styles.sectionHeader}>
             <View style={styles.sectionTitleRow}>
-              <Text style={[styles.sectionTitle, { color: theme.text }]}>COMPOSITION COLLECTION</Text>
+              <Text style={[styles.sectionTitle, { color: theme.text }]}>Compositions</Text>
               <TouchableOpacity 
                 style={[styles.addCompositionBtn, { backgroundColor: theme.primarySoft, borderColor: theme.primary }]}
                 onPress={() => setShowAddCompModal(true)}
@@ -795,39 +799,30 @@ export default function ItemDetailScreen() {
         visible={showNotationModal}
         animationType="slide"
         transparent={false}
-        onRequestClose={() => setShowNotationModal(false)}
+        presentationStyle="fullScreen"
+        supportedOrientations={['portrait', 'landscape']}
+        onRequestClose={closeNotation}
       >
-        <SafeAreaView style={{ flex: 1, backgroundColor: theme.background }}>
-          <View style={[styles.fullscreenHeader, { borderBottomColor: theme.border }]}>
-            <TouchableOpacity onPress={() => setShowNotationModal(false)} style={styles.backBtn}>
-              <Feather name="x" size={28} color={theme.text} />
-            </TouchableOpacity>
-            <View style={{ flex: 1, alignItems: 'center' }}>
-              <Text style={[styles.fullscreenTitle, { color: theme.text }]}>Notation View</Text>
-              <Text style={{ fontSize: 12, color: theme.textSecondary, fontWeight: '600' }}>
-                {selectedItem?.name || selectedNotation?.notationData?.compositionName || "Composition"}
-              </Text>
-            </View>
-            <View style={{ width: 40 }} />
-          </View>
+        <SafeAreaProvider>
+        <SafeAreaView style={{ flex: 1, minWidth: 0, backgroundColor: theme.background }}>
+          <NotationViewHeader onClose={closeNotation}
+            subtitle={selectedItem?.name || selectedNotation?.notationData?.compositionName || 'Composition'}
+            backgroundColor={theme.background} color={theme.text} secondaryColor={theme.textSecondary} borderColor={theme.border} />
           
-          <ScrollView style={{ flex: 1 }}>
+          <ScrollView style={{ flex: 1, minWidth: 0 }}>
             <View style={{ padding: 16 }}>
               {selectedItem && (
                 <View style={{ marginBottom: 16, padding: 12, backgroundColor: isDark ? '#111' : '#f8f9fa', borderRadius: 8 }}>
                    <Text style={{ fontSize: 18, fontWeight: '800', color: theme.text, marginBottom: 4 }}>{selectedItem.name}</Text>
                    <Text style={{ fontSize: 13, color: theme.textSecondary }}>
-                     {selectedItem.type} • {selectedItem.taal} — {selectedItem.beats} beats
+                     {selectedItem.type} • {selectedItem.taal} — {(selectedItem as any).beats || selectedNotation?.notationData?.beatsPerCycle || 16} beats
                    </Text>
                 </View>
               )}
+              {loadingNotation && <ActivityIndicator accessibilityLabel="Loading notation" color={theme.primary} style={{ marginVertical: 24 }} />}
               {selectedNotation && (
                 <NotationTableEnhanced 
-                  sections={buildSectionsFromNotationRows(
-                    selectedNotation.notationData?.notationRows || [],
-                    selectedNotation.notationData?.swarText || selectedNotation.notationData?.notation,
-                    selectedNotation.notationData?.beatsPerCycle || selectedItem?.beats || 16
-                  )}
+                  sections={notationSections}
                   beatsPerCycle={selectedNotation.notationData?.beatsPerCycle || selectedItem?.beats || 16}
                   taalName={selectedItem?.taal || selectedNotation.notationData?.taal || selectedNotation.notationData?.taalName || "Teental"}
                   isAalap={selectedItem?.type === 'Aalap' || selectedNotation.notationData?.isAalap || false}
@@ -837,7 +832,7 @@ export default function ItemDetailScreen() {
                 />
               )}
 
-              {userData?.accountType === 'Instructor' && (
+              {selectedNotation && !loadingNotation && userData?.accountType === 'Instructor' && (
                 <TouchableOpacity 
                   style={[styles.addSectionBtn, { backgroundColor: theme.primarySoft, borderColor: theme.primary }]}
                   onPress={handleAddSection}
@@ -849,6 +844,7 @@ export default function ItemDetailScreen() {
             </View>
           </ScrollView>
         </SafeAreaView>
+        </SafeAreaProvider>
       </Modal>
     </SafeAreaView>
   );
@@ -965,10 +961,14 @@ const styles = StyleSheet.create({
   },
   sectionTitleRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
     alignItems: 'center',
     gap: 12,
   },
   sectionTitle: {
+    flexShrink: 1,
+    maxWidth: '100%',
     fontSize: 13,
     fontWeight: '800',
     letterSpacing: 1,
@@ -987,6 +987,9 @@ const styles = StyleSheet.create({
   },
   addCompositionBtn: {
     flexDirection: 'row',
+    marginLeft: 'auto',
+    maxWidth: '100%',
+    flexShrink: 1,
     alignItems: 'center',
     paddingHorizontal: 12,
     paddingVertical: 6,
@@ -995,6 +998,7 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   addCompositionBtnText: {
+    flexShrink: 1,
     fontSize: 12,
     fontWeight: '700',
   },
@@ -1028,6 +1032,15 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     padding: 16,
   },
+  compositionMenuButton: {
+    width: 40,
+    height: 40,
+    marginVertical: -6,
+    marginRight: -8,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   compLeft: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1056,29 +1069,31 @@ const styles = StyleSheet.create({
     fontSize: 13,
     marginTop: 2,
   },
-  compExpanded: {
-    padding: 16,
-    paddingTop: 0,
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(0,0,0,0.05)',
-  },
-  compActions: {
-    flexDirection: 'row',
-    gap: 10,
-    marginTop: 16,
-  },
-  compActionBtn: {
+  compositionMenuOverlay: {
     flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    height: 44,
-    borderRadius: 12,
-    gap: 6,
+    justifyContent: 'flex-end',
+    padding: 16,
+    backgroundColor: 'rgba(0,0,0,0.28)',
   },
-  compActionText: {
+  compositionActionMenu: {
+    width: '100%',
+    maxWidth: 360,
+    alignSelf: 'center',
+    borderRadius: 18,
+    borderWidth: 1,
+    padding: 8,
+    marginBottom: Platform.OS === 'ios' ? 18 : 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.2,
+    shadowRadius: 18,
+    elevation: 10,
+  },
+  compositionMenuTitle: {
+    paddingHorizontal: 12,
+    paddingVertical: 10,
     fontSize: 14,
-    fontWeight: '700',
+    fontWeight: '800',
   },
   detailsCard: {
     margin: 20,

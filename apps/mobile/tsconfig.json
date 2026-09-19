@@ -1,6 +1,13 @@
 {
   "extends": "expo/tsconfig.base",
   "compilerOptions": {
-    "strict": true
+    "strict": true,
+    "baseUrl": "../..",
+    "paths": {
+      "@music-app/firebase": ["packages/firebase/src/index.ts"],
+      "@music-app/store": ["packages/store/src/index.ts"],
+      "@music-app/types": ["packages/types/src/index.ts"],
+      "@music-app/utils": ["packages/utils/src/index.ts"]
+    }
   }
 }

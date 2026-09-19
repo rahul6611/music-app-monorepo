@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 
 export type NotationTab = 'swar' | 'stroke' | 'lyrics' | 'bol' | 'pakhawajBol' | 'mridangamBol' | 'finger' | 'layakari';
-export type SwarOctaveMode = 'normal' | 'lower' | 'higher' | 'doubleLower';
+export type SwarOctaveMode = 'normal' | 'lower' | 'higher' | 'doubleLower' | 'doubleHigher';
 
 interface NotationInputState {
   // Active tab
@@ -25,6 +25,10 @@ interface NotationInputState {
   setSwarOctaveMode: (mode: SwarOctaveMode) => void;
   showSwarEffects: boolean;
   setShowSwarEffects: (v: boolean) => void;
+  swarSubIndex: number | null;
+  setSwarSubIndex: (index: number | null) => void;
+  swarKanSubIndex: number | null;
+  setSwarKanSubIndex: (index: number | null) => void;
 
   // Text inputs for each tab
   swarText: string;
@@ -85,6 +89,10 @@ export const useNotationStore = create<NotationInputState>()((set, get) => ({
   setSwarOctaveMode: (mode) => set({ swarOctaveMode: mode }),
   showSwarEffects: false,
   setShowSwarEffects: (v) => set({ showSwarEffects: v }),
+  swarSubIndex: null,
+  setSwarSubIndex: (index) => set({ swarSubIndex: index }),
+  swarKanSubIndex: null,
+  setSwarKanSubIndex: (index) => set({ swarKanSubIndex: index }),
 
   swarText: '',
   setSwarText: (s) => set({ swarText: s }),
@@ -127,6 +135,8 @@ export const useNotationStore = create<NotationInputState>()((set, get) => ({
       swar: 0, stroke: 0, lyrics: 0, bol: 0,
       pakhawajBol: 0, mridangamBol: 0, finger: 0, layakari: 0,
     },
+    swarSubIndex: null,
+    swarKanSubIndex: null,
   }),
 
   getActiveText: () => {

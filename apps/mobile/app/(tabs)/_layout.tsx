@@ -1,4 +1,4 @@
-import { Tabs, Redirect, Slot, usePathname, useRouter } from 'expo-router';
+import { Tabs, Redirect, usePathname, useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { View, Platform, useWindowDimensions, Text, Pressable } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -7,6 +7,7 @@ import { useEffect, useState } from 'react';
 import { fetchUserData } from '@music-app/firebase';
 import { useTheme } from '@music-app/store';
 import { Sidebar } from '../../components/layout/Sidebar';
+import { ResponsiveTabShell } from '../../components/layout/ResponsiveTabShell';
 import { signOut } from 'firebase/auth';
 import { auth } from '@music-app/firebase';
 
@@ -76,43 +77,34 @@ export default function TabsLayout() {
 
   const isDesktop = width >= 768;
 
-  if (isDesktop) {
-    return (
-      <View className="flex-1 flex-row h-full bg-zinc-950">
-        <Sidebar
-          items={navItems}
-          activeId={activeTab}
-          onSelect={handleNavSelect}
-          userEmail={user?.email || 'rahul@musiki.com'}
-          onLogout={handleLogout}
-        />
-        
-        <View className="flex-1 flex-col h-full bg-zinc-950">
-          {/* Top Bar for Desktop */}
-          <View className="h-16 border-b border-zinc-900 bg-zinc-950/80 px-8 flex-row items-center justify-between">
-            <Text className="text-xl font-bold text-white tracking-tight">
-              {getHeaderTitle()}
-            </Text>
-            <View className="flex-row items-center space-x-4">
-              <Pressable className="w-9 h-9 rounded-xl bg-zinc-900 border border-zinc-800 items-center justify-center hover:bg-zinc-800 active:opacity-70">
-                <Feather name="bell" size={16} color="#9ca3af" />
-              </Pressable>
-              <Pressable className="w-9 h-9 rounded-xl bg-zinc-900 border border-zinc-800 items-center justify-center hover:bg-zinc-800 active:opacity-70">
-                <Feather name="settings" size={16} color="#9ca3af" />
-              </Pressable>
-            </View>
-          </View>
-
-          {/* Slot content */}
-          <View className="flex-1">
-            <Slot />
-          </View>
-        </View>
+  const desktopHeader = (
+    <View className="h-16 border-b border-zinc-900 bg-zinc-950/80 px-8 flex-row items-center justify-between">
+      <Text className="text-xl font-bold text-white tracking-tight">
+        {getHeaderTitle()}
+      </Text>
+      <View className="flex-row items-center space-x-4">
+        <Pressable className="w-9 h-9 rounded-xl bg-zinc-900 border border-zinc-800 items-center justify-center hover:bg-zinc-800 active:opacity-70">
+          <Feather name="bell" size={16} color="#9ca3af" />
+        </Pressable>
+        <Pressable className="w-9 h-9 rounded-xl bg-zinc-900 border border-zinc-800 items-center justify-center hover:bg-zinc-800 active:opacity-70">
+          <Feather name="settings" size={16} color="#9ca3af" />
+        </Pressable>
       </View>
-    );
-  }
+    </View>
+  );
 
   return (
+    <ResponsiveTabShell
+      desktop={isDesktop}
+      header={desktopHeader}
+      sidebar={<Sidebar
+        items={navItems}
+        activeId={activeTab}
+        onSelect={handleNavSelect}
+        userEmail={user?.email || 'rahul@musiki.com'}
+        onLogout={handleLogout}
+      />}
+    >
     <Tabs
       screenOptions={{
         headerShown: false,
@@ -123,6 +115,7 @@ export default function TabsLayout() {
         },
         headerTitleStyle: { color: theme.text, fontWeight: 'bold' },
         tabBarStyle: {
+          display: isDesktop ? 'none' : 'flex',
           backgroundColor: theme.background,
           borderTopWidth: 1,
           borderTopColor: theme.border,
@@ -177,5 +170,6 @@ export default function TabsLayout() {
         }}
       />
     </Tabs>
+    </ResponsiveTabShell>
   );
 }

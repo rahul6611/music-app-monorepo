@@ -1,14 +1,16 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Platform } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Platform, Image, useWindowDimensions } from 'react-native';
 import { Feather } from '@expo/vector-icons';
-import { useTheme } from '@music-app/store';
-import { useNotationStore, NotationTab } from '@music-app/store';
+import { useTheme, useNotationStore } from '@music-app/store';
+
+const avagrahaImg = require('../../assets/notation/avagraha symbol.webp');
 
 interface NotationFooterProps {
   onJumpBeat: (direction: 'prev' | 'next') => void;
 }
 
 export default function NotationFooter({ onJumpBeat }: NotationFooterProps) {
+  const { width } = useWindowDimensions();
   const theme = useTheme();
   const { 
     activeTab, getActiveText, setActiveText,
@@ -46,7 +48,7 @@ export default function NotationFooter({ onJumpBeat }: NotationFooterProps) {
   };
 
   const handleInsertS = () => {
-    const s = bolLanguage === 'hi' ? 'ऽ ' : 'S ';
+    const s = activeTab === 'lyrics' ? 'ऽ' : bolLanguage === 'hi' && ['bol', 'pakhawajBol', 'mridangamBol'].includes(activeTab) ? 'ऽ ' : 'S ';
     insertAtCursor(s);
   };
 
@@ -58,29 +60,35 @@ export default function NotationFooter({ onJumpBeat }: NotationFooterProps) {
     insertAtCursor(' ');
   };
 
+  // The screen owns both intra-beat and inter-beat navigation.
+  const handleNavigate = onJumpBeat;
+
   return (
     <View style={s.footer}>
-      <TouchableOpacity style={s.largePill} onPress={() => onJumpBeat('prev')}>
+      <TouchableOpacity accessibilityRole="button" accessibilityLabel="Previous notation position" style={[s.largePill, width >= 700 && s.largePillWide]} onPress={() => handleNavigate('prev')}>
         <Feather name="chevron-left" size={24} color="#fff" />
       </TouchableOpacity>
 
-      <TouchableOpacity style={s.smallPill} onPress={handleInsertSpace}>
-        <Text style={s.smallPillText}>Spc</Text>
+      <TouchableOpacity accessibilityRole="button" accessibilityLabel="Insert space"
+        style={[s.smallPill, s.spacePill]} onPress={handleInsertSpace}>
+        <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75} style={s.smallPillText}>Spc</Text>
       </TouchableOpacity>
 
       <TouchableOpacity style={s.smallPill} onPress={handleBackspace}>
-        <Feather name="delete" size={20} color={theme.text} />
+        <Feather name="delete" size={20} color="#111" />
       </TouchableOpacity>
 
-      <TouchableOpacity style={s.smallPill} onPress={handleInsertS}>
-        <Text style={s.smallPillText}>S</Text>
+      <TouchableOpacity accessibilityRole="button" accessibilityLabel="Avagraha" style={[s.smallPill, s.avagrahaPill]} onPress={handleInsertS}>
+        <Image source={avagrahaImg} style={s.avagrahaIcon} />
       </TouchableOpacity>
 
       <TouchableOpacity style={s.smallPill} onPress={handleInsertDash}>
-        <Text style={s.smallPillText}>—</Text>
+        <Text style={s.symbolText}>-</Text>
       </TouchableOpacity>
 
-      <TouchableOpacity style={s.largePill} onPress={() => onJumpBeat('next')}>
+      {['bol', 'pakhawajBol', 'mridangamBol'].includes(activeTab) && <TouchableOpacity style={s.smallPill} onPress={() => insertAtCursor('/')}><Text style={s.symbolText}>/</Text></TouchableOpacity>}
+
+      <TouchableOpacity accessibilityRole="button" accessibilityLabel="Next notation position" style={[s.largePill, width >= 700 && s.largePillWide]} onPress={() => handleNavigate('next')}>
         <Feather name="chevron-right" size={24} color="#fff" />
       </TouchableOpacity>
     </View>
@@ -89,6 +97,7 @@ export default function NotationFooter({ onJumpBeat }: NotationFooterProps) {
 
 const createStyles = (theme: any, isDark: boolean) => StyleSheet.create({
   footer: {
+    flexShrink: 0,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -112,21 +121,30 @@ const createStyles = (theme: any, isDark: boolean) => StyleSheet.create({
     shadowRadius: 4,
     elevation: 3,
   },
+  largePillWide: { width: undefined, flex: 1.7, maxWidth: 180 },
   smallPill: {
+    flex: 1,
     height: 44,
-    paddingHorizontal: 14,
+    paddingHorizontal: 8,
     borderRadius: 14,
-    backgroundColor: isDark ? '#1a1a1a' : '#f0f0f0',
+    backgroundColor: '#fff',
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: isDark ? '#2a2a2a' : '#e0e0e0',
+    borderColor: '#e0e0e0',
   },
   smallPillText: {
     fontSize: 14,
     fontWeight: '600',
-    color: theme.text,
+    color: '#111',
   },
+  // Five controls share this row on percussion keyboards. Keep enough inline
+  // room for all three letters without increasing the overall footer width.
+  spacePill: { minWidth: 34, paddingHorizontal: 3 },
+  symbolText: { fontSize: 23, fontWeight: '700', color: '#111' },
+  avagrahaPill: { paddingHorizontal: 4, overflow: 'visible' },
+  // Same asset and scale as Web Beta; the image includes transparent padding.
+  avagrahaIcon: { width: 34, height: 34, resizeMode: 'contain', transform: [{ scale: 1.75 }] },
   sPillText: {
     fontSize: 20,
     fontWeight: '700',

@@ -563,6 +563,25 @@ export const addRaagNotation = async (
   }
 };
 
+/** Replace a notation document's data without appending duplicate rows during autosave. */
+export const updateRaagNotation = async (
+  raagId: string,
+  notationId: string,
+  notationData: any,
+  collectionName: string = 'raags'
+): Promise<void> => {
+  const notationDocRef = doc(db, collectionName, raagId, 'notations', notationId);
+  const cleanedRows = Array.isArray(notationData?.notationRows)
+    ? notationData.notationRows.map((row: any, index: number) => ({ ...row, index }))
+    : [];
+  const existing = await getDoc(notationDocRef);
+  await setDoc(notationDocRef, {
+    notationData: { ...notationData, notationRows: cleanedRows },
+    updatedAt: serverTimestamp(),
+    ...(!existing.exists() ? { createdAt: serverTimestamp() } : {}),
+  }, { merge: true });
+};
+
 // Helper function to reconstruct notation from notationRows array
 const reconstructNotationFromRows = (notationData: any): any => {
   if (!notationData) return notationData;

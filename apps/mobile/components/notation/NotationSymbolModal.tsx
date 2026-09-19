@@ -76,6 +76,12 @@ export default function NotationSymbolModal({ isOpen, onClose, isSitar }: Notati
             <Text style={s.stylePreviewNoteText}>S R</Text>
           </View>
         )
+      },
+      {
+        name: 'Bracket',
+        description: 'Special grouped notation for string-instrument techniques',
+        input: '[ S ]',
+        style: <Text style={s.stylePreviewNoteText}>[ S ]</Text>
       }
     );
   }

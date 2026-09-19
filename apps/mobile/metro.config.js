@@ -1,14 +1,9 @@
 const { getDefaultConfig } = require('expo/metro-config');
 const { withNativeWind } = require('nativewind/metro');
-const path = require('path');
 
-const projectRoot = __dirname;
-const workspaceRoot = path.resolve(projectRoot, '../..');
-
-const config = getDefaultConfig(projectRoot);
-
-// 1. Watch all files in the project root and workspace root (for packages)
-config.watchFolders = [projectRoot, workspaceRoot];
+// Expo SDK 52+ detects npm workspaces and configures monorepo resolution
+// automatically. Keep this config focused on app-specific customizations.
+const config = getDefaultConfig(__dirname);
 
 // Exclude the nested my-expo-app from being watched or scanned
 config.resolver.blockList = [
@@ -29,13 +24,6 @@ config.resolver.resolveRequest = (context, moduleName, platform) => {
   }
   return context.resolveRequest(context, moduleName, platform);
 };
-
-
-// 2. Let Metro know where to look for node_modules (local and hoisted)
-config.resolver.nodeModulesPaths = [
-  path.resolve(projectRoot, 'node_modules'),
-  path.resolve(workspaceRoot, 'node_modules'),
-];
 
 // Wrap with NativeWind — this is REQUIRED for NativeWind v4 to process CSS
 module.exports = withNativeWind(config, { 
