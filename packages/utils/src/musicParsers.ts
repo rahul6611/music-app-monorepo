@@ -10,8 +10,8 @@ export interface ParsedPhraseCell {
 }
 
 const NOTE_REGEX = /^(\*)?(\.{1,3})[srgmpdnSRGMPDN]['’\u030D\u0304\u0305]?$|^(\*)?[srgmpdnSRGMPDN]['’\u030D\u0304\u0305]?(\.{1,3})$|^(\*)?[srgmpdnSRGMPDN]['’\u030D\u0304\u0305]?$|^-$/;
-const OPEN_SLASH = /^\/(\d+|md|kn|k|gh|mu|kh|gm|aa|th_start|th_middle|th_end)$/i;
-const NESTED_TOKEN = /\/(\d+|md|kn|kh|k|gh|mu|gm|aa|th_start|th_middle|th_end)\b|\/|\(|\)|\[|\]|\{|\}|\||(?:\*)?(?:\.{1,3})?[srgmpdnSRGMPDN]['’\u030D\u0304\u0305]?(?:\.{1,3})?|-/gi;
+const OPEN_SLASH = /^\/(\d+|md|kn|k|gh|mu|kh|gm|aa|sp|th_start|th_middle|th_end)$/i;
+const NESTED_TOKEN = /\/(\d+|md|kn|kh|k|gh|mu|gm|aa|sp|th_start|th_middle|th_end)\b|\/|\(|\)|\[|\]|\{|\}|\||(?:\*)?(?:\.{1,3})?[srgmpdnSRGMPDN]['’\u030D\u0304\u0305]?(?:\.{1,3})?|-/gi;
 
 function expandTihai(input: string): string {
   return input.replace(/\/th\b\s*([^/]*?)\s*\//gi, (_match, content: string) => {

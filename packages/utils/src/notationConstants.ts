@@ -85,31 +85,87 @@ export const MRIDANGAM_BOL_GROUPS: BolGroup[] = [
   { id: 'both_group', section: 'both', mainBol: { en: 'Tha', hi: 'था' }, additionalBols: [{ en: 'Dhi', hi: 'धी' }] },
 ];
 
+export type BolLanguage = 'en' | 'hi';
+export type BilingualBol = { en: string; hi: string };
+
+const BOL_LOOKUP = (() => {
+  const map = new Map<string, BilingualBol>();
+  const add = (bol: BilingualBol) => {
+    if (!bol.en || !bol.hi) return;
+    map.set(bol.en.toLocaleLowerCase(), bol);
+    map.set(bol.hi, bol);
+    const noDash = bol.en.replace(/-/g, '').toLocaleLowerCase();
+    if (!map.has(noDash)) map.set(noDash, bol);
+  };
+  [...TABLA_BOL_GROUPS, ...PAKHAVAJ_BOL_GROUPS, ...MRIDANGAM_BOL_GROUPS].forEach(group => {
+    add(group.mainBol);
+    group.additionalBols?.forEach(add);
+  });
+  return map;
+})();
+
+/** Beta-compatible, bidirectional bol lookup for saved EN or HI notation. */
+export function getBilingualBol(raw: string): BilingualBol | null {
+  const value = raw.replace(/^\*/, '').trim();
+  if (/^[Sऽ]\d*$/i.test(value)) {
+    return { en: value.replace(/ऽ/g, 'S'), hi: value.replace(/S/gi, 'ऽ') };
+  }
+  const direct = BOL_LOOKUP.get(value.toLocaleLowerCase()) ?? BOL_LOOKUP.get(value);
+  if (direct) return direct;
+  if (value.includes('-')) {
+    const parts = value.split('-').map(part => BOL_LOOKUP.get(part.toLocaleLowerCase()) ?? BOL_LOOKUP.get(part));
+    if (parts.every((part): part is BilingualBol => !!part)) {
+      return { en: parts.map(part => part.en).join('-'), hi: parts.map(part => part.hi).join('-') };
+    }
+  }
+  return null;
+}
+
 // ─── Stroke Presets ───
 export const getStrokePresets = (instruments: string[]): { label: string; value: string }[] => {
   const lower = instruments.map(s => s.toLowerCase());
+  const has = (name: string) => lower.some(value => value === name || value.includes(name));
   
-  if (lower.includes('santoor')) {
+  if (has('santoor')) {
     return [
       { label: 'L', value: 'L ' },
       { label: 'R', value: 'R ' },
     ];
   }
-  if (lower.some(s => ['sitar', 'sarod', 'rudra veena'].includes(s))) {
+  if (has('sitar') || has('sarod') || has('rudra veena')) {
     return [
       { label: 'Da', value: 'Da ' },
       { label: 'Ra', value: 'Ra ' },
       { label: 'Diri', value: 'Diri ' },
     ];
   }
-  if (lower.includes('flute')) {
+  if (has('flute')) {
     return [{ label: 'Tu', value: 'Tu ' }];
   }
   return [
     { label: 'Da', value: 'Da ' },
-    { label: 'Ra', value: 'Ra ' },
+    { label: 'DaRa', value: 'Da Ra ' },
+    { label: 'Daa', value: 'Daa ' },
     { label: 'Dir', value: 'Dir ' },
+    { label: 'Khali', value: 'Khali ' },
+    { label: 'Ra', value: 'Ra ' },
+    { label: 'Raa', value: 'Raa ' },
   ];
+};
+
+export const getFingerPresets = (instruments: string[]): string[] => {
+  const lower = instruments.map(value => value.toLowerCase());
+  const has = (name: string) => lower.some(value => value === name || value.includes(name));
+  const isSitar = has('sitar');
+  const isSarod = has('sarod');
+  const isSantoor = has('santoor');
+  const isFlute = has('flute');
+  const isRudraVeena = has('rudra veena');
+
+  if (isSarod && !isSitar && !isRudraVeena) return ['F1', 'F2'];
+  if (isSantoor && !isSitar && !isSarod) return ['L', 'R'];
+  if (isFlute) return ['L1', 'L2', 'L3', 'L4', 'R1', 'R2', 'R3', 'R4'];
+  return ['F1', 'F2', 'F3'];
 };
 
 // ─── Line Type Options ───

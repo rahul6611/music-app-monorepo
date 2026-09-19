@@ -7,3 +7,6 @@ export * from './NotationStyleParse';
 export * from './AutoPatternGeneration';
 export * from './musicParsers';
 export * from './effectNotation';
+export * from './notationTableData';
+export * from './notationTableLayout';
+export * from './notationSelection';

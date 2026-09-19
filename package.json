@@ -13,6 +13,9 @@
     "android": "turbo run android",
     "ios": "turbo run ios",
     "web": "turbo run web",
+    "mobile:start": "npm --workspace @music-app/mobile run start --",
+    "mobile:go": "npm --workspace @music-app/mobile run start -- --go",
+    "mobile:dev-client": "npm --workspace @music-app/mobile run start -- --dev-client",
     "clean": "turbo run clean && rimraf node_modules"
   },
   "devDependencies": {

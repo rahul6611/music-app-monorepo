@@ -3,7 +3,7 @@ export type SlashEffectToken = {
   inner: string;
 };
 
-const SLASH_EFFECT_TAG = /^\/(?:md|kn|k|gh|mu|kh|gm|aa|\d+|th_start|th_middle|th_end|th)\b/i;
+const SLASH_EFFECT_TAG = /^\/(?:md|kn|k|gh|mu|kh|gm|aa|sp|\d+|th_start|th_middle|th_end|th)\b/i;
 
 export function splitTopLevelEffectTokens(input: string): string[] {
   const source = input.trim();

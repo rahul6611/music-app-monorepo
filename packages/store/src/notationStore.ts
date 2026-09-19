@@ -26,6 +26,8 @@ interface NotationInputState {
   showSwarEffects: boolean;
   setShowSwarEffects: (v: boolean) => void;
   swarSubIndex: number | null;
+  explicitSwarSplits: Record<number, boolean>;
+  setExplicitSwarSplit: (segment: number, enabled: boolean) => void;
   setSwarSubIndex: (index: number | null) => void;
   swarKanSubIndex: number | null;
   setSwarKanSubIndex: (index: number | null) => void;
@@ -90,6 +92,10 @@ export const useNotationStore = create<NotationInputState>()((set, get) => ({
   showSwarEffects: false,
   setShowSwarEffects: (v) => set({ showSwarEffects: v }),
   swarSubIndex: null,
+  explicitSwarSplits: {},
+  setExplicitSwarSplit: (segment, enabled) => set(state => ({
+    explicitSwarSplits: { ...state.explicitSwarSplits, [segment]: enabled },
+  })),
   setSwarSubIndex: (index) => set({ swarSubIndex: index }),
   swarKanSubIndex: null,
   setSwarKanSubIndex: (index) => set({ swarKanSubIndex: index }),
@@ -129,6 +135,7 @@ export const useNotationStore = create<NotationInputState>()((set, get) => ({
   setShowSavedMessage: (v) => set({ showSavedMessage: v }),
 
   clearAll: () => set({
+    explicitSwarSplits: {},
     swarText: '', strokeText: '', lyricsText: '', bolText: '',
     pakhawajBolText: '', mridangamBolText: '', fingerText: '', layakariText: '',
     cursorPositions: {
